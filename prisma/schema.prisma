@@ -1,0 +1,142 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CASHIER
+  MANAGER
+  ADMIN
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  WALLET
+  QR
+  BANK_TRANSFER
+  CREDIT
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  QUEUED
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(CASHIER)
+  orders       Order[]
+  auditLogs    AuditLog[]
+  createdAt    DateTime  @default(now())
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  products    Product[]
+}
+
+model Product {
+  id               String         @id @default(uuid())
+  categoryId       String
+  category         Category       @relation(fields: [categoryId], references: [id])
+  name             String
+  sku              String         @unique
+  priceLKR         Decimal
+  stockQty         Int
+  reorderThreshold Int            @default(10)
+  orderItems       OrderItem[]
+  inventoryLogs    InventoryLog[]
+  updatedAt        DateTime       @updatedAt
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+  totalLKR      Decimal
+  status        String      @default("PENDING")
+  items         OrderItem[]
+  payment       Payment?
+  createdAt     DateTime    @default(now())
+}
+
+model OrderItem {
+  id         String   @id @default(uuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Int
+  unitPriceLKR Decimal
+}
+
+model Payment {
+  id           String        @id @default(uuid())
+  orderId      String        @unique
+  order        Order         @relation(fields: [orderId], references: [id])
+  method       PaymentMethod
+  status       PaymentStatus @default(PENDING)
+  amountLKR    Decimal
+  changeLKR    Decimal?
+  gatewayRef   String?
+  bankRef      String?
+  walletRef    String?
+  qrPayload    String?
+  customerName String?
+  synced       Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  settledAt    DateTime?
+}
+
+model CustomerCredit {
+  id           String   @id @default(uuid())
+  customerName String
+  phone        String   @unique
+  balanceLKR   Decimal  @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model InventoryLog {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  qtyChange Int
+  reason    String
+  loggedAt  DateTime @default(now())
+}
+
+model Outbox {
+  id        String   @id @default(uuid())
+  entity    String
+  entityId  String
+  operation String
+  payload   Json
+  synced    Boolean  @default(false)
+  retries   Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+}

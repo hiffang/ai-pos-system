@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-electron/
+client/dist/
+.env
+*.db
+*.onnx
+coverage/
+CLAUDE.md
