@@ -11,6 +11,7 @@
     "test": "jest --runInBand",
     "lint": "eslint . --ext .js,.jsx",
     "format": "prettier --write .",
+    "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "node prisma/seed.js",
     "db:studio": "prisma studio"
@@ -20,7 +21,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@prisma/client": "^7.8.0",
+    "@prisma/client": "^4.15.0",
     "@supabase/supabase-js": "^2.105.1",
     "axios": "^1.15.2",
     "bcryptjs": "^3.0.3",
@@ -31,7 +32,8 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "onnxruntime-node": "^1.25.1",
-    "prisma": "^7.8.0",
+    "pg": "^8.12.1",
+    "prisma": "^4.15.0",
     "react-qr-code": "^2.0.21",
     "react-router-dom": "^7.14.2",
     "recharts": "^3.8.1",

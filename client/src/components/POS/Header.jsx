@@ -1,3 +1,5 @@
+import ConnectivityIndicator from "../ConnectivityIndicator";
+
 export default function Header() {
   const currentTime = new Date().toLocaleTimeString("en-US", {
     hour: "2-digit",
@@ -16,10 +18,7 @@ export default function Header() {
         </div>
       </div>
       <div className="flex items-center gap-6">
-        <div className="flex items-center gap-2 px-3 py-1 bg-primary-container/10 text-primary border border-primary-container/20 rounded-full">
-          <span className="w-2 h-2 rounded-full bg-[#1D9E75] animate-pulse"></span>
-          <span className="font-label-caps uppercase">Synced</span>
-        </div>
+        <ConnectivityIndicator />
         <div className="font-h3 text-on-surface-variant tabular-nums">
           {currentTime}
         </div>

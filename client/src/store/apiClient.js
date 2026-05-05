@@ -1,0 +1,293 @@
+/**
+ * API Client Service
+ * Handles all backend API calls with offline support
+ */
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+
+function normalizeProduct(product) {
+  const priceValue = product.priceLKR ?? product.price ?? 0;
+  const stockValue = product.stockQty ?? product.quantity ?? product.stock ?? 0;
+  const thresholdValue =
+    product.reorderThreshold ?? product.threshold ?? 0;
+  const parsedPrice =
+    typeof priceValue === "string" ? parseFloat(priceValue) : priceValue;
+  const parsedStock =
+    typeof stockValue === "string" ? parseInt(stockValue, 10) : stockValue;
+  const parsedThreshold =
+    typeof thresholdValue === "string"
+      ? parseInt(thresholdValue, 10)
+      : thresholdValue;
+  const categoryName =
+    product.category?.name ??
+    product.categoryName ??
+    product.category ??
+    "Uncategorized";
+  const normalizedStock = Number.isNaN(parsedStock) ? 0 : parsedStock;
+  const normalizedThreshold = Number.isNaN(parsedThreshold) ? 0 : parsedThreshold;
+  const status =
+    normalizedStock <= 0
+      ? "out"
+      : normalizedStock <= normalizedThreshold
+        ? "low"
+        : "ok";
+
+  return {
+    ...product,
+    price: Number.isNaN(parsedPrice) ? 0 : parsedPrice,
+    stock: normalizedStock,
+    threshold: normalizedThreshold,
+    category: categoryName,
+    sku: product.sku ?? product.id,
+    status,
+  };
+}
+
+/**
+ * Fetch all categories
+ * @returns {Promise<array>} - Categories array
+ */
+export async function fetchCategories() {
+  try {
+    const response = await fetch(`${API_BASE}/categories`);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error("[API] Failed to fetch categories:", error);
+    return [];
+  }
+}
+
+/**
+ * Create a new category
+ * @param {string} name - Category name
+ * @returns {Promise<object>} - Created category
+ */
+export async function createCategory(name) {
+  try {
+    const response = await fetch(`${API_BASE}/categories`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || `API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error("[API] Failed to create category:", error);
+    throw error;
+  }
+}
+
+/**
+ * Update a category
+ * @param {string} id - Category ID
+ * @param {string} name - New category name
+ * @returns {Promise<object>} - Updated category
+ */
+export async function updateCategory(id, name) {
+  try {
+    const response = await fetch(`${API_BASE}/categories/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || `API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error("[API] Failed to update category:", error);
+    throw error;
+  }
+}
+
+/**
+ * Delete a category
+ * @param {string} id - Category ID
+ * @returns {Promise<void>}
+ */
+export async function deleteCategory(id) {
+  try {
+    const response = await fetch(`${API_BASE}/categories/${id}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || `API error: ${response.status}`);
+    }
+  } catch (error) {
+    console.error("[API] Failed to delete category:", error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch products from backend
+ * @param {object} options - Query options (search, category, pagination)
+ * @returns {Promise<array>} - Products array
+ */
+export async function fetchProducts(options = {}) {
+  try {
+    const { search = "", skip = 0, take = 50, category } = options;
+
+    const params = new URLSearchParams({
+      skip,
+      take,
+      ...(search && { search }),
+      ...(category && { category }),
+    });
+
+    const response = await fetch(`${API_BASE}/products?${params}`);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return (data.data || []).map(normalizeProduct);
+  } catch (error) {
+    console.error("[API] Failed to fetch products:", error);
+    return [];
+  }
+}
+
+/**
+ * Fetch products with pagination metadata
+ * @param {object} options - Query options (search, category, pagination)
+ * @returns {Promise<object>} - { data, pagination }
+ */
+export async function fetchProductsPage(options = {}) {
+  try {
+    const { search = "", skip = 0, take = 50, category } = options;
+
+    const params = new URLSearchParams({
+      skip,
+      take,
+      ...(search && { search }),
+      ...(category && { category }),
+    });
+
+    const response = await fetch(`${API_BASE}/products?${params}`);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return {
+      data: (data.data || []).map(normalizeProduct),
+      pagination: data.pagination || { skip, take, total: 0 },
+    };
+  } catch (error) {
+    console.error("[API] Failed to fetch products:", error);
+    return { data: [], pagination: { skip: 0, take: 0, total: 0 } };
+  }
+}
+
+/**
+ * Get single product by ID
+ * @param {string} id - Product ID
+ * @returns {Promise<object>} - Product data
+ */
+export async function fetchProductById(id) {
+  try {
+    const response = await fetch(`${API_BASE}/products/${id}`);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data ? normalizeProduct(data.data) : null;
+  } catch (error) {
+    console.error("[API] Failed to fetch product:", error);
+    return null;
+  }
+}
+
+/**
+ * Create a transaction with items
+ * @param {object} transaction - Transaction data
+ * @returns {Promise<object>} - Created transaction
+ */
+export async function createTransaction(transaction) {
+  try {
+    const response = await fetch(`${API_BASE}/transactions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(transaction),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || `API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error("[API] Failed to create transaction:", error);
+    throw error;
+  }
+}
+
+/**
+ * Process a payment
+ * @param {object} payment - Payment data
+ * @returns {Promise<object>} - Payment result
+ */
+export async function processPayment(payment) {
+  try {
+    const response = await fetch(`${API_BASE}/payments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payment),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || `API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data;
+  } catch (error) {
+    console.error("[API] Failed to process payment:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get server health and sync status
+ * @returns {Promise<object>} - Health status
+ */
+export async function getServerHealth() {
+  try {
+    const response = await fetch(`${API_BASE}/health`);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("[API] Server unreachable:", error);
+    return { status: "offline" };
+  }
+}
