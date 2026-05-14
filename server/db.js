@@ -1,22 +1,24 @@
 const { PrismaClient } = require("@prisma/client");
 
+/** @type {import("@prisma/client").PrismaClient} */
 let prisma;
+
+/** @type {typeof globalThis & { prisma?: import("@prisma/client").PrismaClient }} */
+const globalForPrisma = global;
 
 try {
   if (process.env.NODE_ENV === "production") {
     prisma = new PrismaClient();
   } else {
     // In development, use global to prevent multiple instances in hot reload
-    if (!global.prisma) {
-      global.prisma = new PrismaClient();
+    if (!globalForPrisma.prisma) {
+      globalForPrisma.prisma = new PrismaClient();
     }
-    prisma = global.prisma;
+    prisma = globalForPrisma.prisma;
   }
 } catch (error) {
-  console.error(
-    "[Prisma] Failed to initialize client.",
-    error.message
-  );
+  const message = error instanceof Error ? error.message : String(error);
+  console.error("[Prisma] Failed to initialize client.", message);
   throw error;
 }
 

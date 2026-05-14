@@ -3,10 +3,13 @@
  * Handles ONNX model inference for demand forecasting, stock predictions, etc.
  * Uses onnxruntime-node for on-device inference
  */
+/** @type {import("onnxruntime-node")} */
 const ort = require("onnxruntime-node");
 const path = require("path");
 
+/** @type {import("onnxruntime-node").InferenceSession | null} */
 let session = null;
+/** @type {string} */
 let modelPath =
   process.env.MODEL_PATH || path.join(__dirname, "../../ai/model.onnx");
 
@@ -28,15 +31,16 @@ async function initializeSession() {
     console.log("[AI] Input names:", session.inputNames);
     console.log("[AI] Output names:", session.outputNames);
   } catch (error) {
-    console.error("[AI] Failed to initialize model:", error);
-    throw new Error(`AI model initialization failed: ${error.message}`);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[AI] Failed to initialize model:", message);
+    throw new Error(`AI model initialization failed: ${message}`);
   }
 }
 
 /**
  * Run demand forecast on product data
- * @param {object} productData - Historical sales data for product
- * @returns {Promise<object>} - Forecast results (demand level, confidence, trend)
+ * @param {{ id?: string, salesHistory?: number[] }} productData - Historical sales data for product
+ * @returns {Promise<{ product?: string, demandLevel: string, demandScore: number, trend: string, confidence: number, timestamp: Date } | null>} - Forecast results
  */
 async function forecastDemand(productData) {
   try {
@@ -44,30 +48,40 @@ async function forecastDemand(productData) {
       throw new Error("AI session not initialized");
     }
 
+    const salesHistory = Array.isArray(productData.salesHistory)
+      ? productData.salesHistory
+      : [];
+
     // Normalize input data to model expectations
     // TODO: Adjust based on actual model input format
+    const tensorType = /** @type {any} */ ("float32");
     const inputs = {
-      float_input: new ort.Tensor("float32", [productData.salesHistory || []]),
+      float_input: new ort.Tensor(tensorType, [salesHistory]),
     };
 
     // Run inference
+    /** @type {Record<string, import("onnxruntime-node").Tensor>} */
     const outputs = await session.run(inputs);
+
+    const demandOutput = outputs[session.outputNames[0]];
+    const trendOutput = outputs[session.outputNames[1]];
 
     // Extract and normalize outputs
     // TODO: Parse based on actual model output format
-    const demandScore = outputs.output0.data[0]; // Typically 0-1 scale
-    const trend = outputs.output1.data[0]; // Trend direction: -1 (down), 0 (flat), 1 (up)
+    const demandScore = Number(demandOutput?.data?.[0] ?? 0); // Typically 0-1 scale
+    const trendValue = Number(trendOutput?.data?.[0] ?? 0); // Trend direction: -1 (down), 0 (flat), 1 (up)
 
     return {
       product: productData.id,
       demandLevel: categorizeDemand(demandScore),
       demandScore,
-      trend: categorizeTrend(trend),
+      trend: categorizeTrend(trendValue),
       confidence: Math.min(1, demandScore * 0.9 + 0.1), // Simulated confidence
       timestamp: new Date(),
     };
   } catch (error) {
-    console.error("[AI] Forecast failed:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[AI] Forecast failed:", message);
     // Return null for inference failures (don't block POS operations)
     return null;
   }
@@ -75,8 +89,8 @@ async function forecastDemand(productData) {
 
 /**
  * Run inventory prediction on all products
- * @param {array} products - Array of product data
- * @returns {Promise<array>} - Predictions for each product
+ * @param {Array<{ id?: string, salesHistory?: number[] }>} products - Array of product data
+ * @returns {Promise<Array<{ product?: string, demandLevel: string, demandScore: number, trend: string, confidence: number, timestamp: Date }>>} - Predictions for each product
  */
 async function predictInventoryNeeds(products) {
   try {
@@ -94,7 +108,8 @@ async function predictInventoryNeeds(products) {
 
     return predictions;
   } catch (error) {
-    console.error("[AI] Inventory prediction failed:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[AI] Inventory prediction failed:", message);
     return [];
   }
 }

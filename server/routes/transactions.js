@@ -1,98 +1,152 @@
 /**
  * Transactions Routes
- * Handles POS transaction operations
+ * Handles POS order operations
  */
+/** @type {import("express")} */
 const express = require("express");
 const router = express.Router();
+/** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
 
-// GET /api/transactions - List transactions
-router.get("/", async (req, res, next) => {
-  try {
-    const { skip = 0, take = 50, startDate, endDate } = req.query;
+// GET /api/transactions - List orders
+router.get(
+  "/",
+  async (
+    /** @type {import("express").Request} */ req,
+    /** @type {import("express").Response} */ res,
+    /** @type {import("express").NextFunction} */ next,
+  ) => {
+    try {
+      const { skip = 0, take = 50, startDate, endDate } = req.query;
 
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        ...(startDate && { createdAt: { gte: new Date(startDate) } }),
-        ...(endDate && { createdAt: { lte: new Date(endDate) } }),
-      },
-      skip: parseInt(skip),
-      take: parseInt(take),
-      include: { items: true, payment: true },
-      orderBy: { createdAt: "desc" },
-    });
-
-    const total = await prisma.transaction.count();
-
-    res.json({
-      status: "success",
-      data: transactions,
-      pagination: { skip: parseInt(skip), take: parseInt(take), total },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// GET /api/transactions/:id - Get single transaction
-router.get("/:id", async (req, res, next) => {
-  try {
-    const transaction = await prisma.transaction.findUnique({
-      where: { id: req.params.id },
-      include: { items: true, payment: true, customer: true },
-    });
-
-    if (!transaction) {
-      const error = new Error("Transaction not found");
-      error.statusCode = 404;
-      throw error;
-    }
-
-    res.json({
-      status: "success",
-      data: transaction,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-// POST /api/transactions - Create transaction
-router.post("/", async (req, res, next) => {
-  try {
-    const { customerId, items, paymentMethod, total, discount } = req.body;
-
-    if (!items || items.length === 0) {
-      const error = new Error("Transaction must have items");
-      error.statusCode = 400;
-      throw error;
-    }
-
-    const transaction = await prisma.transaction.create({
-      data: {
-        customerId,
-        total: parseFloat(total),
-        discount: discount ? parseFloat(discount) : 0,
-        paymentMethod,
-        status: "completed",
-        items: {
-          create: items.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            price: parseFloat(item.price),
-          })),
+      const orders = await prisma.order.findMany({
+        where: {
+          ...(startDate && { createdAt: { gte: new Date(startDate) } }),
+          ...(endDate && { createdAt: { lte: new Date(endDate) } }),
         },
-      },
-      include: { items: true },
-    });
+        skip: parseInt(skip),
+        take: parseInt(take),
+        include: { items: true, payment: true, user: true },
+        orderBy: { createdAt: "desc" },
+      });
 
-    res.status(201).json({
-      status: "success",
-      data: transaction,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+      const total = await prisma.order.count({
+        where: {
+          ...(startDate && { createdAt: { gte: new Date(startDate) } }),
+          ...(endDate && { createdAt: { lte: new Date(endDate) } }),
+        },
+      });
+
+      res.json({
+        status: "success",
+        data: orders,
+        pagination: { skip: parseInt(skip), take: parseInt(take), total },
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// GET /api/transactions/:id - Get single order
+router.get(
+  "/:id",
+  async (
+    /** @type {import("express").Request} */ req,
+    /** @type {import("express").Response} */ res,
+    /** @type {import("express").NextFunction} */ next,
+  ) => {
+    try {
+      const order = await prisma.order.findUnique({
+        where: { id: req.params.id },
+        include: { items: true, payment: true, user: true },
+      });
+
+      if (!order) {
+        const error = new Error("Order not found");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      res.json({
+        status: "success",
+        data: order,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// POST /api/transactions - Create order
+router.post(
+  "/",
+  async (
+    /** @type {import("express").Request} */ req,
+    /** @type {import("express").Response} */ res,
+    /** @type {import("express").NextFunction} */ next,
+  ) => {
+    try {
+      const { userId, items, total, totalLKR } = req.body;
+
+      if (!items || items.length === 0) {
+        const error = new Error("Order must have items");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      if (!userId) {
+        const error = new Error("User ID is required");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const totalValue = totalLKR ?? total;
+      const computedTotal = items.reduce((sum, item) => {
+        const priceValue = item.unitPriceLKR ?? item.unitPrice ?? item.price;
+        const qtyValue = item.quantity ?? 0;
+        const parsedPrice =
+          typeof priceValue === "string" ? parseFloat(priceValue) : priceValue;
+        const parsedQty =
+          typeof qtyValue === "string" ? parseInt(qtyValue, 10) : qtyValue;
+        return (
+          sum +
+          (Number.isNaN(parsedPrice) ? 0 : parsedPrice) *
+            (Number.isNaN(parsedQty) ? 0 : parsedQty)
+        );
+      }, 0);
+
+      const orderTotal =
+        totalValue !== undefined && totalValue !== null
+          ? parseFloat(totalValue)
+          : computedTotal;
+
+      const order = await prisma.order.create({
+        data: {
+          userId,
+          totalLKR: orderTotal,
+          status: "PENDING",
+          items: {
+            create: items.map((item) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              unitPriceLKR: parseFloat(
+                item.unitPriceLKR ?? item.unitPrice ?? item.price,
+              ),
+            })),
+          },
+        },
+        include: { items: true },
+      });
+
+      res.status(201).json({
+        status: "success",
+        data: order,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 module.exports = router;

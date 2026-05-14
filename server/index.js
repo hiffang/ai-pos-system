@@ -1,9 +1,15 @@
 require("dotenv").config();
+/** @type {import("express")} */
 const express = require("express");
+/** @type {import("cors")} */
 const cors = require("cors");
-const helmet = require("helmet");
+const helmet =
+  /** @type {(options?: any) => import("express").RequestHandler} */ (
+    /** @type {unknown} */ (require("helmet"))
+  );
 
 // Import services and middleware
+/** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("./db");
 const errorHandler = require("./middleware/errorHandler");
 const { initializeSession, getModelStatus } = require("./services/aiInference");
@@ -44,15 +50,21 @@ function validateEnvironment() {
 }
 
 // Health checks
-app.get("/api/health", (req, res) => {
-  res.json({
-    status: "ok",
-    timestamp: new Date(),
-    environment: process.env.NODE_ENV,
-    aiModelStatus: getModelStatus(),
-    syncStatus: getSyncStatus(),
-  });
-});
+app.get(
+  "/api/health",
+  (
+    /** @type {import("express").Request} */ req,
+    /** @type {import("express").Response} */ res,
+  ) => {
+    res.json({
+      status: "ok",
+      timestamp: new Date(),
+      environment: process.env.NODE_ENV,
+      aiModelStatus: getModelStatus(),
+      syncStatus: getSyncStatus(),
+    });
+  },
+);
 
 // API Routes
 app.use("/api/categories", categoriesRoutes);
@@ -86,9 +98,10 @@ async function start() {
     try {
       await initializeSession();
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       console.warn(
         "[Server] AI model initialization failed (non-critical):",
-        err.message,
+        message,
       );
       console.warn("[Server] Continuing without AI features");
     }
@@ -102,7 +115,8 @@ async function start() {
       console.log(`[Server] Environment: ${process.env.NODE_ENV}`);
     });
   } catch (error) {
-    console.error("[Server] Startup failed:", error.message);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[Server] Startup failed:", message);
     process.exit(1);
   }
 }

@@ -2,8 +2,10 @@
  * Supabase Client
  * Manages connection to Supabase for cloud sync
  */
+/** @type {import("@supabase/supabase-js")} */
 const { createClient } = require("@supabase/supabase-js");
 
+/** @type {import("@supabase/supabase-js").SupabaseClient | null} */
 let supabase = null;
 
 /**
@@ -32,14 +34,15 @@ function initializeSupabase() {
     console.log("[Supabase] Client initialized");
     return supabase;
   } catch (error) {
-    console.error("[Supabase] Failed to initialize:", error.message);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[Supabase] Failed to initialize:", message);
     return null;
   }
 }
 
 /**
  * Get or initialize Supabase client
- * @returns {object|null} - Supabase client or null if not configured
+ * @returns {import("@supabase/supabase-js").SupabaseClient | null} - Supabase client or null if not configured
  */
 function getSupabaseClient() {
   if (!supabase) {

@@ -3,6 +3,7 @@
  * Implements offline-first pattern with atomic database writes + outbox entries
  * All data modifications should use localWrite() to ensure sync consistency
  */
+/** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
 
 /**
@@ -28,12 +29,13 @@ async function localWrite(operation, entity, entityId, payload) {
     });
 
     console.log(
-      `[localWrite] ${operation} ${entity} ${entityId} queued for sync`
+      `[localWrite] ${operation} ${entity} ${entityId} queued for sync`,
     );
 
     return outboxEntry;
   } catch (error) {
-    console.error(`[localWrite] Failed to write ${entity}:`, error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[localWrite] Failed to write ${entity}:`, message);
     throw error;
   }
 }
@@ -51,7 +53,8 @@ async function getPendingOutbox() {
     });
     return pending;
   } catch (error) {
-    console.error("[getPendingOutbox] Failed to retrieve outbox:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[getPendingOutbox] Failed to retrieve outbox:", message);
     throw error;
   }
 }
@@ -69,7 +72,8 @@ async function markOutboxAsSynced(ids) {
     });
     return result;
   } catch (error) {
-    console.error("[markOutboxAsSynced] Failed to update outbox:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[markOutboxAsSynced] Failed to update outbox:", message);
     throw error;
   }
 }

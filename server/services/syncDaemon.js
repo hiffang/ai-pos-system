@@ -3,11 +3,25 @@
  * Watches for pending outbox entries and syncs to Supabase when online
  * Handles conflict resolution and retry logic
  */
+/** @type {import("@prisma/client").PrismaClient} */
+/** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
-const supabase = require("../utils/supabaseClient");
+const supabase =
+  /** @type {import("@supabase/supabase-js").SupabaseClient | null} */ (
+    /** @type {unknown} */ (require("../utils/supabaseClient"))
+  );
 
+/** @type {NodeJS.Timeout | null} */
 let syncInterval = null;
 let isOnline = true;
+
+/** @type {{ addEventListener: (type: string, listener: () => void) => void } | undefined} */
+const browserWindow =
+  typeof globalThis !== "undefined" &&
+  "window" in globalThis &&
+  /** @type {any} */ (globalThis).window
+    ? /** @type {any} */ (globalThis).window
+    : undefined;
 
 /**
  * Start the sync daemon
@@ -22,14 +36,14 @@ function startSyncDaemon() {
   console.log("[Sync] Starting sync daemon");
 
   // Check connectivity
-  if (typeof window !== "undefined") {
-    window.addEventListener("online", () => {
+  if (browserWindow) {
+    browserWindow.addEventListener("online", () => {
       isOnline = true;
       console.log("[Sync] Online detected, starting sync");
       syncPendingOutbox();
     });
 
-    window.addEventListener("offline", () => {
+    browserWindow.addEventListener("offline", () => {
       isOnline = false;
       console.log("[Sync] Offline detected, pausing sync");
     });
@@ -39,14 +53,16 @@ function startSyncDaemon() {
   syncInterval = setInterval(() => {
     if (isOnline) {
       syncPendingOutbox().catch((err) => {
-        console.error("[Sync] Daemon error:", err.message);
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("[Sync] Daemon error:", message);
       });
     }
   }, 30000);
 
   // Initial sync attempt
   syncPendingOutbox().catch((err) => {
-    console.warn("[Sync] Initial sync failed (non-blocking):", err.message);
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn("[Sync] Initial sync failed (non-blocking):", message);
   });
 }
 
@@ -91,7 +107,8 @@ async function syncPendingOutbox() {
         await syncEntry(entry);
         synced++;
       } catch (error) {
-        console.error(`[Sync] Failed to sync ${entry.id}:`, error.message);
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[Sync] Failed to sync ${entry.id}:`, message);
         failed++;
 
         // Increment retry count
@@ -106,7 +123,8 @@ async function syncPendingOutbox() {
 
     return { synced, failed };
   } catch (error) {
-    console.error("[Sync] Outbox query failed:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[Sync] Outbox query failed:", message);
     throw error;
   }
 }
@@ -114,6 +132,9 @@ async function syncPendingOutbox() {
 /**
  * Sync a single outbox entry to Supabase
  * @param {object} entry - Outbox entry
+ */
+/**
+ * @param {{ id: string, entity: string, entityId: string, operation: string, payload: any }} entry
  */
 async function syncEntry(entry) {
   if (!supabase) {
@@ -156,7 +177,8 @@ async function syncEntry(entry) {
 
     console.log(`[Sync] ✓ ${entity} ${operation} synced`);
   } catch (error) {
-    console.error(`[Sync] ✗ ${entity} ${operation} failed:`, error.message);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[Sync] ✗ ${entity} ${operation} failed:`, message);
     throw error;
   }
 }
@@ -167,6 +189,7 @@ async function syncEntry(entry) {
  * @returns {string} - Table name
  */
 function getSupabaseTable(entity) {
+  /** @type {Record<string, string>} */
   const tableMap = {
     Order: "orders",
     OrderItem: "order_items",

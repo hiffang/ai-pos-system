@@ -1,4 +1,5 @@
 // Central error handling middleware for all Express routes
+/** @type {import("express").ErrorRequestHandler} */
 const errorHandler = (err, req, res, next) => {
   console.error("[Error]", err.message || err);
 

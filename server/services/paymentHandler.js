@@ -1,82 +1,108 @@
 /**
  * Payment Handler Service
- * Processes payments for different methods: Cash, PayHere, OnePay, Bank Transfer, Credit/Tab
+ * Processes payments for different methods: Cash, Card, Wallet, QR, Bank Transfer, Credit/Tab
  */
+/** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
 
 /**
+ * @typedef {object} PaymentMetadata
+ * @property {number} [changeLKR]
+ * @property {string} [gatewayRef]
+ * @property {string} [bankRef]
+ * @property {string} [walletRef]
+ * @property {string} [qrPayload]
+ * @property {string} [customerName]
+ * @property {string} [customerPhone]
+ */
+
+/**
+ * @param {string} message
+ * @param {number} statusCode
+ */
+function createHttpError(message, statusCode) {
+  const error = /** @type {Error & { statusCode?: number }} */ (
+    new Error(message)
+  );
+  error.statusCode = statusCode;
+  return error;
+}
+
+/**
  * Process a payment transaction
- * @param {string} method - Payment method (cash, payherecard, payheewallet, onepay, banktransfer, credit)
+ * @param {string} orderId - Order ID to attach payment
+ * @param {string} method - Payment method (cash, card, wallet, qr, banktransfer, credit)
  * @param {number} amount - Amount in LKR
- * @param {string} customerId - Customer ID (required for credit/tab)
- * @param {object} metadata - Payment-specific metadata (e.g., reference number, bank name)
+ * @param {PaymentMetadata} metadata - Payment-specific metadata (e.g., gatewayRef, bankRef, changeLKR)
  * @returns {Promise<object>} - Payment transaction record
  */
-async function processPayment(
-  method,
-  amount,
-  customerId = null,
-  metadata = {},
-) {
+async function processPayment(orderId, method, amount, metadata = {}) {
   try {
+    if (!orderId) {
+      throw createHttpError("Order ID is required", 400);
+    }
+
     // Validate amount
     if (amount <= 0) {
-      const error = new Error("Payment amount must be greater than 0");
-      error.statusCode = 400;
-      throw error;
+      throw createHttpError("Payment amount must be greater than 0", 400);
     }
 
-    // Validate payment method
-    const validMethods = [
-      "cash",
-      "payherecard",
-      "payherewallet",
-      "onepay",
-      "banktransfer",
-      "credit",
-    ];
-    if (!validMethods.includes(method)) {
-      const error = new Error(`Invalid payment method: ${method}`);
-      error.statusCode = 400;
-      throw error;
+    const normalizedMethod = normalizePaymentMethod(method);
+    if (!normalizedMethod) {
+      throw createHttpError(`Invalid payment method: ${method}`, 400);
     }
 
-    // For credit/tab payments, validate customer
-    if (method === "credit" && !customerId) {
-      const error = new Error("Customer ID required for credit/tab payments");
-      error.statusCode = 400;
-      throw error;
+    const customerName = metadata.customerName;
+    const customerPhone = metadata.customerPhone;
+
+    if (normalizedMethod === "CREDIT" && !customerPhone) {
+      throw createHttpError(
+        "Customer phone is required for credit/tab payments",
+        400,
+      );
     }
+
+    /** @type {import("@prisma/client").PaymentStatus} */
+    const paymentStatus = getInitialPaymentStatus(normalizedMethod);
 
     // Create payment record
     const payment = await prisma.payment.create({
       data: {
-        method,
-        amount,
-        customerId,
-        status: getInitialPaymentStatus(method),
-        metadata,
-        processedAt: new Date(),
+        orderId,
+        method: normalizedMethod,
+        status: paymentStatus,
+        amountLKR: amount,
+        changeLKR: metadata?.changeLKR,
+        gatewayRef: metadata?.gatewayRef,
+        bankRef: metadata?.bankRef,
+        walletRef: metadata?.walletRef,
+        qrPayload: metadata?.qrPayload,
+        customerName: customerName,
+        ...(paymentStatus === "COMPLETED" && { settledAt: new Date() }),
       },
     });
 
-    // For credit/tab, update customer credit balance
-    if (method === "credit" && customerId) {
-      await prisma.customer.update({
-        where: { id: customerId },
-        data: {
-          creditBalance: {
-            increment: amount,
-          },
+    if (normalizedMethod === "CREDIT" && customerPhone) {
+      await prisma.customerCredit.upsert({
+        where: { phone: customerPhone },
+        update: {
+          balanceLKR: { increment: amount },
+          customerName: customerName || "Customer",
+        },
+        create: {
+          phone: customerPhone,
+          customerName: customerName || "Customer",
+          balanceLKR: amount,
         },
       });
     }
 
     return payment;
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error(
       `[processPayment] Failed to process ${method} payment:`,
-      error,
+      message,
     );
     throw error;
   }
@@ -92,23 +118,22 @@ async function verifyPayHerePayment(paymentId, signature) {
   try {
     // TODO: Implement PayHere webhook signature verification
     // For now, mark as verified (implement actual verification per PayHere docs)
-    const payment = await prisma.payment.findUnique({
-      where: { externalPaymentId: paymentId },
+    const payment = await prisma.payment.findFirst({
+      where: { gatewayRef: paymentId },
     });
 
     if (!payment) {
-      const error = new Error("Payment not found");
-      error.statusCode = 404;
-      throw error;
+      throw createHttpError("Payment not found", 404);
     }
 
     // Update payment status
     return await prisma.payment.update({
       where: { id: payment.id },
-      data: { status: "completed" },
+      data: { status: "COMPLETED", settledAt: new Date() },
     });
   } catch (error) {
-    console.error("[verifyPayHerePayment] Verification failed:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[verifyPayHerePayment] Verification failed:", message);
     throw error;
   }
 }
@@ -117,71 +142,64 @@ async function verifyPayHerePayment(paymentId, signature) {
  * Get initial payment status based on method
  * Some methods require verification, others are immediate
  * @param {string} method - Payment method
- * @returns {string} - Initial status
+ * @returns {import("@prisma/client").PaymentStatus} - Initial status
  */
 function getInitialPaymentStatus(method) {
   switch (method) {
-    case "cash":
-      return "completed"; // Cash is always immediate
-    case "payherecard":
-    case "payherewallet":
-      return "pending"; // Requires PayHere verification
-    case "onepay":
-      return "pending"; // Requires OnePay verification
-    case "banktransfer":
-      return "pending"; // Requires manual verification
-    case "credit":
-      return "completed"; // Credit recorded immediately
+    case "CASH":
+      return "COMPLETED"; // Cash is immediate
+    case "CARD":
+    case "WALLET":
+    case "QR":
+      return "PENDING"; // Requires gateway verification
+    case "BANK_TRANSFER":
+      return "PENDING"; // Requires manual verification
+    case "CREDIT":
+      return "COMPLETED"; // Credit recorded immediately
     default:
-      return "pending";
+      return "PENDING";
+  }
+}
+
+/**
+ * Normalize payment method to Prisma enum value
+ * @param {string} method
+ * @returns {import("@prisma/client").PaymentMethod | null}
+ */
+function normalizePaymentMethod(method) {
+  if (!method) return null;
+  const value = method.toString().trim().toLowerCase();
+  switch (value) {
+    case "cash":
+      return "CASH";
+    case "card":
+    case "payherecard":
+      return "CARD";
+    case "wallet":
+    case "payherewallet":
+      return "WALLET";
+    case "qr":
+    case "onepay":
+      return "QR";
+    case "bank_transfer":
+    case "banktransfer":
+      return "BANK_TRANSFER";
+    case "credit":
+      return "CREDIT";
+    default:
+      return null;
   }
 }
 
 /**
  * Refund a payment
- * @param {string} paymentId - Payment ID to refund
- * @param {string} reason - Refund reason
- * @returns {Promise<object>} - Refund record
+ * @returns {Promise<never>} - Refund not implemented
  */
-async function refundPayment(paymentId, reason = "") {
-  try {
-    const payment = await prisma.payment.findUnique({
-      where: { id: paymentId },
-    });
-
-    if (!payment) {
-      const error = new Error("Payment not found");
-      error.statusCode = 404;
-      throw error;
-    }
-
-    if (payment.status !== "completed") {
-      const error = new Error("Only completed payments can be refunded");
-      error.statusCode = 400;
-      throw error;
-    }
-
-    // Create refund record
-    const refund = await prisma.refund.create({
-      data: {
-        paymentId,
-        amount: payment.amount,
-        reason,
-        status: "pending",
-      },
-    });
-
-    // Update payment status
-    await prisma.payment.update({
-      where: { id: paymentId },
-      data: { status: "refunded" },
-    });
-
-    return refund;
-  } catch (error) {
-    console.error("[refundPayment] Refund failed:", error);
-    throw error;
-  }
+async function refundPayment() {
+  throw createHttpError(
+    "Refunds are not implemented in the current schema",
+    501,
+  );
 }
 
 module.exports = {
