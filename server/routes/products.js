@@ -7,6 +7,7 @@ const express = require("express");
 const router = express.Router();
 /** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
+const { localWrite } = require("../services/syncEngine");
 
 /**
  * @param {string} message
@@ -181,21 +182,26 @@ router.post(
         throw createHttpError("Category ID is required", 400);
       }
 
-      const product = await prisma.product.create({
-        data: {
-          name,
-          sku,
-          priceLKR: parseFloat(priceValue),
-          stockQty:
-            stockValue !== undefined && stockValue !== null
-              ? parseInt(stockValue, 10)
-              : 0,
-          ...(thresholdValue !== undefined &&
-            thresholdValue !== null && {
-              reorderThreshold: parseInt(thresholdValue, 10),
-            }),
-          categoryId,
-        },
+      const product = await localWrite({
+        operation: "INSERT",
+        entity: "Product",
+        write: (tx) =>
+          tx.product.create({
+            data: {
+              name,
+              sku,
+              priceLKR: parseFloat(priceValue),
+              stockQty:
+                stockValue !== undefined && stockValue !== null
+                  ? parseInt(stockValue, 10)
+                  : 0,
+              ...(thresholdValue !== undefined &&
+                thresholdValue !== null && {
+                  reorderThreshold: parseInt(thresholdValue, 10),
+                }),
+              categoryId,
+            },
+          }),
       });
 
       res.status(201).json({
@@ -238,20 +244,25 @@ router.put(
         throw createHttpError("Product ID is required", 400);
       }
 
-      const product = await prisma.product.update({
-        where: { id: productId },
-        data: {
-          ...(name && { name }),
-          ...(priceValue !== undefined &&
-            priceValue !== null && { priceLKR: parseFloat(priceValue) }),
-          ...(stockValue !== undefined &&
-            stockValue !== null && { stockQty: parseInt(stockValue, 10) }),
-          ...(thresholdValue !== undefined &&
-            thresholdValue !== null && {
-              reorderThreshold: parseInt(thresholdValue, 10),
-            }),
-          ...(categoryId && { categoryId }),
-        },
+      const product = await localWrite({
+        operation: "UPDATE",
+        entity: "Product",
+        write: (tx) =>
+          tx.product.update({
+            where: { id: productId },
+            data: {
+              ...(name && { name }),
+              ...(priceValue !== undefined &&
+                priceValue !== null && { priceLKR: parseFloat(priceValue) }),
+              ...(stockValue !== undefined &&
+                stockValue !== null && { stockQty: parseInt(stockValue, 10) }),
+              ...(thresholdValue !== undefined &&
+                thresholdValue !== null && {
+                  reorderThreshold: parseInt(thresholdValue, 10),
+                }),
+              ...(categoryId && { categoryId }),
+            },
+          }),
       });
 
       res.json({

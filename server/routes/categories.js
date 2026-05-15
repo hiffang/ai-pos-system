@@ -7,6 +7,19 @@ const express = require("express");
 const router = express.Router();
 /** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
+const { localWrite } = require("../services/syncEngine");
+
+/**
+ * @param {string} message
+ * @param {number} statusCode
+ */
+function createHttpError(message, statusCode) {
+  const error = /** @type {Error & { statusCode?: number }} */ (
+    new Error(message)
+  );
+  error.statusCode = statusCode;
+  return error;
+}
 
 // GET /api/categories - List all categories
 router.get(
@@ -56,9 +69,7 @@ router.get(
       });
 
       if (!category) {
-        const error = new Error("Category not found");
-        error.statusCode = 404;
-        throw error;
+        throw createHttpError("Category not found", 404);
       }
 
       res.json({
@@ -83,9 +94,7 @@ router.post(
       const { name } = req.body;
 
       if (!name) {
-        const error = new Error("Category name is required");
-        error.statusCode = 400;
-        throw error;
+        throw createHttpError("Category name is required", 400);
       }
 
       // Check for duplicate
@@ -94,13 +103,13 @@ router.post(
       });
 
       if (existing) {
-        const error = new Error("Category already exists");
-        error.statusCode = 409;
-        throw error;
+        throw createHttpError("Category already exists", 409);
       }
 
-      const category = await prisma.category.create({
-        data: { name },
+      const category = await localWrite({
+        operation: "INSERT",
+        entity: "Category",
+        write: (tx) => tx.category.create({ data: { name } }),
       });
 
       res.status(201).json({
@@ -125,14 +134,17 @@ router.put(
       const { name } = req.body;
 
       if (!name) {
-        const error = new Error("Category name is required");
-        error.statusCode = 400;
-        throw error;
+        throw createHttpError("Category name is required", 400);
       }
 
-      const category = await prisma.category.update({
-        where: { id: req.params.id },
-        data: { name },
+      const category = await localWrite({
+        operation: "UPDATE",
+        entity: "Category",
+        write: (tx) =>
+          tx.category.update({
+            where: { id: req.params.id },
+            data: { name },
+          }),
       });
 
       res.json({
@@ -154,21 +166,25 @@ router.delete(
     /** @type {import("express").NextFunction} */ next,
   ) => {
     try {
-      // Check if category has products
-      const count = await prisma.product.count({
-        where: { categoryId: req.params.id },
-      });
+      await localWrite({
+        operation: "DELETE",
+        entity: "Category",
+        write: async (tx) => {
+          const count = await tx.product.count({
+            where: { categoryId: req.params.id },
+          });
 
-      if (count > 0) {
-        const error = new Error(
-          `Cannot delete category with ${count} product(s)`,
-        );
-        error.statusCode = 400;
-        throw error;
-      }
+          if (count > 0) {
+            throw createHttpError(
+              `Cannot delete category with ${count} product(s)`,
+              400,
+            );
+          }
 
-      await prisma.category.delete({
-        where: { id: req.params.id },
+          return tx.category.delete({
+            where: { id: req.params.id },
+          });
+        },
       });
 
       res.json({

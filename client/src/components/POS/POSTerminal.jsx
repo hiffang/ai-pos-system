@@ -15,7 +15,7 @@ export default function POSTerminal() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("cash");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("CASH");
 
   // Fetch products and categories on mount
   useEffect(() => {
@@ -83,7 +83,7 @@ export default function POSTerminal() {
 
       // Process payment
       await processPayment({
-        method: selectedPaymentMethod.toLowerCase(),
+        method: selectedPaymentMethod,
         amount: total,
       });
 

@@ -7,6 +7,7 @@ const express = require("express");
 const router = express.Router();
 /** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
+const { localWrite } = require("../services/syncEngine");
 
 // GET /api/transactions - List orders
 router.get(
@@ -121,22 +122,27 @@ router.post(
           ? parseFloat(totalValue)
           : computedTotal;
 
-      const order = await prisma.order.create({
-        data: {
-          userId,
-          totalLKR: orderTotal,
-          status: "PENDING",
-          items: {
-            create: items.map((item) => ({
-              productId: item.productId,
-              quantity: item.quantity,
-              unitPriceLKR: parseFloat(
-                item.unitPriceLKR ?? item.unitPrice ?? item.price,
-              ),
-            })),
-          },
-        },
-        include: { items: true },
+      const order = await localWrite({
+        operation: "INSERT",
+        entity: "Order",
+        write: (tx) =>
+          tx.order.create({
+            data: {
+              userId,
+              totalLKR: orderTotal,
+              status: "PENDING",
+              items: {
+                create: items.map((item) => ({
+                  productId: item.productId,
+                  quantity: item.quantity,
+                  unitPriceLKR: parseFloat(
+                    item.unitPriceLKR ?? item.unitPrice ?? item.price,
+                  ),
+                })),
+              },
+            },
+            include: { items: true },
+          }),
       });
 
       res.status(201).json({

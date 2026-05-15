@@ -52,7 +52,7 @@ export default function Cart({
                 >
                   remove
                 </button>
-                <span className="font-h3 tabular-nums min-w-[1.5rem] text-center">
+                <span className="font-h3 tabular-nums min-w-6 text-center">
                   {item.quantity}
                 </span>
                 <button
@@ -83,24 +83,24 @@ export default function Cart({
 
         <div className="grid grid-cols-2 gap-2 mb-6">
           {[
-            { label: "Cash", value: "cash", icon: "payments", fill: true },
-            { label: "Card", value: "card", icon: "credit_card", fill: false },
-            { label: "LankaQR", value: "qr", icon: "qr_code", fill: false },
+            { label: "Cash", value: "CASH", icon: "payments", fill: true },
+            { label: "Card", value: "CARD", icon: "credit_card", fill: false },
+            { label: "LankaQR", value: "QR", icon: "qr_code", fill: false },
             {
               label: "eZ/mCash",
-              value: "wallet",
+              value: "WALLET",
               icon: "account_balance_wallet",
               fill: false,
             },
             {
-              label: "Transfer",
-              value: "transfer",
+              label: "Bank Transfer",
+              value: "BANK_TRANSFER",
               icon: "account_balance",
               fill: false,
             },
             {
               label: "Credit/Tab",
-              value: "credit",
+              value: "CREDIT",
               icon: "assignment",
               fill: false,
             },
@@ -125,7 +125,7 @@ export default function Cart({
           ))}
         </div>
 
-        <button 
+        <button
           onClick={onCheckout}
           disabled={items.length === 0}
           className="w-full h-16 bg-[#1D9E75] text-white rounded-xl font-h1 shadow-lg hover:brightness-95 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"

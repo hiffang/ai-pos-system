@@ -5,11 +5,36 @@
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
 
+function normalizePaymentMethod(method) {
+  if (!method) return undefined;
+  const value = method.toString().trim().toUpperCase();
+  switch (value) {
+    case "CASH":
+      return "CASH";
+    case "CARD":
+    case "PAYHERECARD":
+      return "CARD";
+    case "WALLET":
+    case "PAYHEREWALLET":
+      return "WALLET";
+    case "QR":
+    case "ONEPAY":
+      return "QR";
+    case "BANK_TRANSFER":
+    case "BANKTRANSFER":
+    case "TRANSFER":
+      return "BANK_TRANSFER";
+    case "CREDIT":
+      return "CREDIT";
+    default:
+      return undefined;
+  }
+}
+
 function normalizeProduct(product) {
   const priceValue = product.priceLKR ?? product.price ?? 0;
   const stockValue = product.stockQty ?? product.quantity ?? product.stock ?? 0;
-  const thresholdValue =
-    product.reorderThreshold ?? product.threshold ?? 0;
+  const thresholdValue = product.reorderThreshold ?? product.threshold ?? 0;
   const parsedPrice =
     typeof priceValue === "string" ? parseFloat(priceValue) : priceValue;
   const parsedStock =
@@ -24,7 +49,9 @@ function normalizeProduct(product) {
     product.category ??
     "Uncategorized";
   const normalizedStock = Number.isNaN(parsedStock) ? 0 : parsedStock;
-  const normalizedThreshold = Number.isNaN(parsedThreshold) ? 0 : parsedThreshold;
+  const normalizedThreshold = Number.isNaN(parsedThreshold)
+    ? 0
+    : parsedThreshold;
   const status =
     normalizedStock <= 0
       ? "out"
@@ -254,10 +281,14 @@ export async function createTransaction(transaction) {
  */
 export async function processPayment(payment) {
   try {
+    const normalizedMethod = normalizePaymentMethod(payment?.method);
     const response = await fetch(`${API_BASE}/payments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payment),
+      body: JSON.stringify({
+        ...payment,
+        ...(normalizedMethod && { method: normalizedMethod }),
+      }),
     });
 
     if (!response.ok) {

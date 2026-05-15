@@ -7,32 +7,55 @@
 const prisma = require("../db");
 
 /**
- * Atomically write data to database and create outbox entry for sync
- * @param {string} operation - Operation type ("INSERT", "UPDATE", "DELETE")
- * @param {string} entity - Entity type (e.g., "Order", "Payment", "Product")
- * @param {string} entityId - Entity ID
- * @param {object} payload - Entity data to persist
- * @returns {Promise<object>} - Database result and outbox entry
+ * @typedef {object} LocalWriteParams
+ * @property {"INSERT"|"UPDATE"|"DELETE"} operation
+ * @property {string} entity
+ * @property {(tx: import("@prisma/client").PrismaClient) => Promise<any>} write
+ * @property {(result: any) => object} [payload]
+ * @property {(result: any) => string} [getEntityId]
  */
-async function localWrite(operation, entity, entityId, payload) {
+
+/**
+ * @param {unknown} value
+ */
+function toJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+/**
+ * Atomically write data to database and create outbox entry for sync
+ * @param {LocalWriteParams} params
+ * @returns {Promise<any>} - Database result
+ */
+async function localWrite({ operation, entity, write, payload, getEntityId }) {
   try {
-    // Create outbox entry for sync
-    const outboxEntry = await prisma.outbox.create({
-      data: {
-        entity,
-        entityId,
-        operation,
-        payload,
-        synced: false,
-        retries: 0,
-      },
+    return await prisma.$transaction(async (tx) => {
+      const result = await write(tx);
+      const entityId = getEntityId ? getEntityId(result) : result?.id;
+
+      if (!entityId) {
+        throw new Error(`Missing entityId for ${entity} ${operation}`);
+      }
+
+      const outboxPayload = payload ? payload(result) : result;
+
+      await tx.outbox.create({
+        data: {
+          entity,
+          entityId,
+          operation,
+          payload: toJson(outboxPayload),
+          synced: false,
+          retries: 0,
+        },
+      });
+
+      console.log(
+        `[localWrite] ${operation} ${entity} ${entityId} queued for sync`,
+      );
+
+      return result;
     });
-
-    console.log(
-      `[localWrite] ${operation} ${entity} ${entityId} queued for sync`,
-    );
-
-    return outboxEntry;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[localWrite] Failed to write ${entity}:`, message);
