@@ -12,7 +12,7 @@ const createWindow = () => {
   const isDev = process.env.NODE_ENV === "development";
   const startUrl = isDev
     ? "http://localhost:5173"
-    : `file://${path.join(__dirname, "../dist/index.html")}`;
+    : `file://${path.join(__dirname, "../client/dist/index.html")}`;
 
   mainWindow.loadURL(startUrl);
 };

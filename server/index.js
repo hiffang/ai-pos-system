@@ -17,6 +17,8 @@ const { startSyncDaemon, getSyncStatus } = require("./services/syncDaemon");
 
 // Import routes
 const categoriesRoutes = require("./routes/categories");
+const customerCreditsRoutes = require("./routes/customerCredits");
+const dashboardRoutes = require("./routes/dashboard");
 const paymentsRoutes = require("./routes/payments");
 const productsRoutes = require("./routes/products");
 const transactionsRoutes = require("./routes/transactions");
@@ -68,6 +70,8 @@ app.get(
 
 // API Routes
 app.use("/api/categories", categoriesRoutes);
+app.use("/api/customer-credits", customerCreditsRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/payments", paymentsRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/transactions", transactionsRoutes);

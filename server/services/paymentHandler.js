@@ -47,9 +47,20 @@ async function processPayment(orderId, method, amount, metadata = {}) {
       throw createHttpError("Payment amount must be greater than 0", 400);
     }
 
+    const rawMethod = method ? method.toString().trim().toUpperCase() : "";
     const normalizedMethod = normalizePaymentMethod(method);
     if (!normalizedMethod) {
+      console.warn("[processPayment] Invalid payment method received:", method);
       throw createHttpError(`Invalid payment method: ${method}`, 400);
+    }
+
+    if (rawMethod && rawMethod !== normalizedMethod) {
+      console.warn(
+        "[processPayment] Legacy payment method normalized:",
+        method,
+        "->",
+        normalizedMethod,
+      );
     }
 
     const customerName = metadata.customerName;

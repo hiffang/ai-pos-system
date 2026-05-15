@@ -1,42 +1,7 @@
-export default function DemandForecastTable() {
-  const forecasts = [
-    {
-      product: "Elephant House Ginger Beer 1.5L",
-      stock: "42 Units",
-      demand: "+28% High",
-      recommendation: "REORDER NOW",
-      color: "danger",
-    },
-    {
-      product: "Keells Chicken Meatballs 500g",
-      stock: "112 Units",
-      demand: "+8% Moderate",
-      recommendation: "MONITOR",
-      color: "warning",
-    },
-    {
-      product: "Munchee Super Cream Cracker",
-      stock: "245 Units",
-      demand: "Stable",
-      recommendation: "SUFFICIENT",
-      color: "primary",
-    },
-    {
-      product: "Dilmah Ceylon Tea 100g",
-      stock: "18 Units",
-      demand: "+15% Rise",
-      recommendation: "REORDER NOW",
-      color: "danger",
-    },
-    {
-      product: "Pelwatte Full Cream Milk 1L",
-      stock: "56 Units",
-      demand: "+5% Low",
-      recommendation: "MONITOR",
-      color: "warning",
-    },
-  ];
-
+export default function DemandForecastTable({
+  forecasts = [],
+  isLoading = false,
+}) {
   const getColorClass = (color) => {
     switch (color) {
       case "danger":
@@ -77,20 +42,34 @@ export default function DemandForecastTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 font-body-md">
-            {forecasts.map((item, idx) => (
-              <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                <td className="px-6 py-4 font-semibold">{item.product}</td>
-                <td className="px-6 py-4">{item.stock}</td>
-                <td className="px-6 py-4 font-bold">{item.demand}</td>
-                <td className="px-6 py-4 text-right">
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-bold ${getColorClass(item.color)}`}
-                  >
-                    {item.recommendation}
-                  </span>
+            {isLoading ? (
+              <tr>
+                <td className="px-6 py-6 text-sm text-text-muted" colSpan={4}>
+                  Loading demand forecast...
                 </td>
               </tr>
-            ))}
+            ) : forecasts.length === 0 ? (
+              <tr>
+                <td className="px-6 py-6 text-sm text-text-muted" colSpan={4}>
+                  No demand forecast available yet.
+                </td>
+              </tr>
+            ) : (
+              forecasts.map((item, idx) => (
+                <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 font-semibold">{item.product}</td>
+                  <td className="px-6 py-4">{item.stock}</td>
+                  <td className="px-6 py-4 font-bold">{item.demand}</td>
+                  <td className="px-6 py-4 text-right">
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-bold ${getColorClass(item.color)}`}
+                    >
+                      {item.recommendation}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

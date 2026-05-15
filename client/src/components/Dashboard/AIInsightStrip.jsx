@@ -1,4 +1,8 @@
-export default function AIInsightStrip() {
+export default function AIInsightStrip({ message, isLoading = false }) {
+  if (!isLoading && !message) {
+    return null;
+  }
+
   return (
     <div
       className="px-6 py-3 rounded flex items-center justify-between"
@@ -19,16 +23,17 @@ export default function AIInsightStrip() {
           ></span>
         </span>
         <p className="text-sm font-medium" style={{ color: "#EF9F27" }}>
-          AI Insights: Bulk beverage demand predicted to increase by 15% due to
-          upcoming local festival weekend. Stock up now.
+          {isLoading ? "Loading AI insights..." : message}
         </p>
       </div>
-      <button
-        className="text-xs font-bold uppercase tracking-widest hover:underline whitespace-nowrap ml-4"
-        style={{ color: "#EF9F27" }}
-      >
-        View Forecast
-      </button>
+      {message ? (
+        <button
+          className="text-xs font-bold uppercase tracking-widest hover:underline whitespace-nowrap ml-4"
+          style={{ color: "#EF9F27" }}
+        >
+          View Forecast
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -71,21 +71,63 @@ export default function POSTerminal() {
   const handleCheckout = async () => {
     try {
       // Create transaction
-      const transaction = await createTransaction({
+      const { order, stockUpdates } = await createTransaction({
+        userId: "SYSTEM",
         items: cartItems.map((item) => ({
           productId: item.id,
           quantity: item.quantity,
           price: item.price,
         })),
         total,
-        paymentMethod: selectedPaymentMethod,
       });
 
       // Process payment
       await processPayment({
+        orderId: order.id,
         method: selectedPaymentMethod,
         amount: total,
       });
+
+      if (stockUpdates.length > 0) {
+        const updatesById = new Map(
+          stockUpdates.map((update) => [update.productId, update]),
+        );
+
+        setProducts((current) =>
+          current.map((product) => {
+            const update = updatesById.get(product.id);
+            if (!update || update.stockQty === null) {
+              return product;
+            }
+            const normalizedStock = update.stockQty;
+            const normalizedThreshold = product.threshold ?? 0;
+            const status =
+              normalizedStock <= 0
+                ? "out"
+                : normalizedStock <= normalizedThreshold
+                  ? "low"
+                  : "ok";
+            return {
+              ...product,
+              stock: normalizedStock,
+              status,
+            };
+          }),
+        );
+
+        setCartItems((current) =>
+          current.map((item) => {
+            const update = updatesById.get(item.id);
+            if (!update || update.stockQty === null) {
+              return item;
+            }
+            return {
+              ...item,
+              stock: update.stockQty,
+            };
+          }),
+        );
+      }
 
       // Clear cart after successful transaction
       clearCart();
@@ -96,7 +138,7 @@ export default function POSTerminal() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden">
+    <div className="h-full flex flex-col bg-background overflow-hidden">
       <main className="flex-1 flex overflow-hidden">
         <section className="w-[70%] h-full flex flex-col p-6 overflow-hidden bg-background">
           <div className="flex items-center gap-4 mb-6">

@@ -10,7 +10,7 @@ export default function Cart({
   const lowStockWarning = items.some((item) => item.stock <= 3);
 
   return (
-    <section className="w-[30%] h-full bg-white border-l border-outline-variant flex flex-col shadow-2xl relative z-10">
+    <section className="w-[30%] h-[calc(100vh-64px)] bg-white border-l border-outline-variant flex flex-col shadow-2xl relative z-10">
       {lowStockWarning && (
         <div className="bg-warning/15 border-b border-warning/20 px-6 py-3 flex items-center gap-3">
           <span className="w-2 h-2 rounded-full bg-warning animate-pulse"></span>
@@ -30,7 +30,7 @@ export default function Cart({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
         {items.length === 0 ? (
           <p className="text-center text-text-muted py-8">No items in cart</p>
         ) : (
