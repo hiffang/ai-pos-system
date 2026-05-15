@@ -378,6 +378,54 @@ export async function fetchProductById(id) {
 }
 
 /**
+ * Update a product
+ * @param {string} id
+ * @param {object} payload
+ * @returns {Promise<object>}
+ */
+export async function updateProduct(id, payload) {
+  try {
+    const response = await fetch(`${API_BASE}/products/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || `API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data ? normalizeProduct(data.data) : null;
+  } catch (error) {
+    console.error("[API] Failed to update product:", error);
+    throw error;
+  }
+}
+
+/**
+ * Delete a product
+ * @param {string} id
+ * @returns {Promise<void>}
+ */
+export async function deleteProduct(id) {
+  try {
+    const response = await fetch(`${API_BASE}/products/${id}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || `API error: ${response.status}`);
+    }
+  } catch (error) {
+    console.error("[API] Failed to delete product:", error);
+    throw error;
+  }
+}
+
+/**
  * Create a transaction with items
  * @param {object} transaction - Transaction data
  * @returns {Promise<object>} - Created transaction

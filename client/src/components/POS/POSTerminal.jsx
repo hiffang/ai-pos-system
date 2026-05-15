@@ -69,6 +69,23 @@ export default function POSTerminal() {
     (sum, item) => sum + item.price * item.quantity,
     0,
   );
+  const filteredProducts = products.filter((product) => {
+    if (selectedCategory === "all") {
+      // Continue to search filtering below.
+    } else {
+      const categoryName = product.category?.toString().toLowerCase() || "";
+      if (categoryName !== selectedCategory) {
+        return false;
+      }
+    }
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) {
+      return true;
+    }
+    const name = product.name?.toString().toLowerCase() || "";
+    const sku = product.sku?.toString().toLowerCase() || "";
+    return name.includes(term) || sku.includes(term);
+  });
 
   const handleCheckout = async () => {
     if (selectedPaymentMethod === "CREDIT") {
@@ -197,7 +214,7 @@ export default function POSTerminal() {
             ))}
           </div>
 
-          <ProductGrid products={products} onAddToCart={addToCart} />
+          <ProductGrid products={filteredProducts} onAddToCart={addToCart} />
         </section>
 
         <Cart

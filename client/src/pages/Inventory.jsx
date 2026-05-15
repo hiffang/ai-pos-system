@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import CategoryManager from "../components/CategoryManager";
-import { fetchCategories, fetchProductsPage } from "../store/apiClient";
+import {
+  fetchCategories,
+  fetchProductsPage,
+  updateProduct,
+  deleteProduct,
+} from "../store/apiClient";
 
 const STATUS_COLORS = {
   "In Stock": "bg-green-100 text-green-700",
@@ -19,6 +24,18 @@ export default function Inventory() {
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState("");
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [activeProduct, setActiveProduct] = useState(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    sku: "",
+    priceLKR: "",
+    stockQty: "",
+    reorderThreshold: "",
+    categoryId: "",
+  });
+  const [formError, setFormError] = useState("");
 
   const loadCategories = useCallback(async () => {
     setCategoriesLoading(true);
@@ -108,6 +125,79 @@ export default function Inventory() {
       start = Math.max(1, end - maxPages + 1);
     }
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  };
+
+  const openEditModal = (product) => {
+    const categoryId =
+      categories.find((cat) => cat.name === product.category)?.id || "";
+    setActiveProduct(product);
+    setEditForm({
+      name: product.name || "",
+      sku: product.sku || "",
+      priceLKR: product.price?.toString() || "",
+      stockQty: product.stock?.toString() || "",
+      reorderThreshold: product.threshold?.toString() || "",
+      categoryId,
+    });
+    setFormError("");
+    setIsEditOpen(true);
+  };
+
+  const openDeleteModal = (product) => {
+    setActiveProduct(product);
+    setFormError("");
+    setIsDeleteOpen(true);
+  };
+
+  const handleEditChange = (field, value) => {
+    setEditForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleSaveProduct = async () => {
+    if (!activeProduct) return;
+    if (!editForm.name || !editForm.sku || !editForm.categoryId) {
+      setFormError("Name, SKU, and category are required.");
+      return;
+    }
+
+    const parsedPrice = parseFloat(editForm.priceLKR);
+    if (Number.isNaN(parsedPrice)) {
+      setFormError("Price must be a number.");
+      return;
+    }
+
+    const parsedStock = editForm.stockQty ? parseInt(editForm.stockQty, 10) : 0;
+    const parsedThreshold = editForm.reorderThreshold
+      ? parseInt(editForm.reorderThreshold, 10)
+      : 0;
+
+    try {
+      await updateProduct(activeProduct.id, {
+        name: editForm.name,
+        sku: editForm.sku,
+        priceLKR: parsedPrice,
+        stockQty: parsedStock,
+        reorderThreshold: parsedThreshold,
+        categoryId: editForm.categoryId,
+      });
+      setIsEditOpen(false);
+      setActiveProduct(null);
+      await loadProducts();
+    } catch (error) {
+      setFormError(error.message || "Failed to update product.");
+    }
+  };
+
+  const handleDeleteProduct = async () => {
+    if (!activeProduct) return;
+    try {
+      await deleteProduct(activeProduct.id);
+      setIsDeleteOpen(false);
+      setActiveProduct(null);
+      await loadProducts();
+    } catch (error) {
+      setFormError(error.message || "Failed to delete product.");
+    }
   };
 
   return (
@@ -295,12 +385,18 @@ export default function Inventory() {
                         </span>
                       </td>
                       <td className="px-6 py-4 flex items-center gap-2">
-                        <button className="p-1 hover:bg-gray-100 rounded text-gray-600 hover:text-gray-900">
+                        <button
+                          className="p-1 hover:bg-gray-100 rounded text-gray-600 hover:text-gray-900"
+                          onClick={() => openEditModal(product)}
+                        >
                           <span className="material-symbols-outlined text-lg">
                             edit
                           </span>
                         </button>
-                        <button className="p-1 hover:bg-gray-100 rounded text-gray-600 hover:text-gray-900">
+                        <button
+                          className="p-1 hover:bg-gray-100 rounded text-gray-600 hover:text-gray-900"
+                          onClick={() => openDeleteModal(product)}
+                        >
                           <span className="material-symbols-outlined text-lg">
                             delete
                           </span>
@@ -358,6 +454,159 @@ export default function Inventory() {
         categories={categories}
         onCategoriesChange={loadCategories}
       />
+
+      {isEditOpen ? (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-lg p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Edit Product
+              </h3>
+              <button
+                className="text-gray-500 hover:text-gray-800"
+                onClick={() => setIsEditOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Name
+                </label>
+                <input
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  value={editForm.name}
+                  onChange={(e) => handleEditChange("name", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  SKU
+                </label>
+                <input
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  value={editForm.sku}
+                  onChange={(e) => handleEditChange("sku", e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Price (LKR)
+                  </label>
+                  <input
+                    type="number"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    value={editForm.priceLKR}
+                    onChange={(e) =>
+                      handleEditChange("priceLKR", e.target.value)
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Stock
+                  </label>
+                  <input
+                    type="number"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    value={editForm.stockQty}
+                    onChange={(e) =>
+                      handleEditChange("stockQty", e.target.value)
+                    }
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Threshold
+                  </label>
+                  <input
+                    type="number"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    value={editForm.reorderThreshold}
+                    onChange={(e) =>
+                      handleEditChange("reorderThreshold", e.target.value)
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Category
+                  </label>
+                  <select
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    value={editForm.categoryId}
+                    onChange={(e) =>
+                      handleEditChange("categoryId", e.target.value)
+                    }
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {formError ? (
+                <p className="text-sm text-red-600">{formError}</p>
+              ) : null}
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900"
+                onClick={() => setIsEditOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700"
+                onClick={handleSaveProduct}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isDeleteOpen ? (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Delete Product
+            </h3>
+            <p className="text-sm text-gray-600 mt-2">
+              Are you sure you want to delete
+              {activeProduct ? ` ${activeProduct.name}` : " this product"}? This
+              cannot be undone.
+            </p>
+            {formError ? (
+              <p className="text-sm text-red-600 mt-3">{formError}</p>
+            ) : null}
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900"
+                onClick={() => setIsDeleteOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700"
+                onClick={handleDeleteProduct}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

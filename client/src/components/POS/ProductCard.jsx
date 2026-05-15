@@ -9,49 +9,19 @@ export default function ProductCard({ product, onAddToCart }) {
       }}
       onClick={() => onAddToCart(product)}
     >
-      <div className="aspect-square rounded-lg bg-gray-100 mb-4 overflow-hidden">
-        <img
-          className="w-full h-full object-cover"
-          src={product.image}
-          alt={product.name}
-        />
-      </div>
-      <div>
-        <h3
-          style={{
-            fontSize: "18px",
-            fontWeight: "600",
-            marginBottom: "4px",
-            color: "#1a1c1b",
-          }}
-        >
-          {product.name}
-        </h3>
-        <div className="flex justify-between items-end">
-          <div>
-            <p
-              style={{
-                fontSize: "14px",
-                fontWeight: isLowStock ? "600" : "400",
-                color: isLowStock ? "#E24B4A" : "#64748B",
-              }}
-            >
-              {isLowStock ? "Low Stock: " : "Stock: "} {product.stock}{" "}
-              {product.id === "6" ? "kg" : "Units"}
-            </p>
-            <p
-              style={{
-                fontSize: "18px",
-                lineHeight: "1",
-                letterSpacing: "-0.02em",
-                fontWeight: "700",
-                color: "#145da3",
-                marginTop: "4px",
-              }}
-            >
-              LKR {product.price.toLocaleString("en-LK")}
-            </p>
-          </div>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-start justify-between">
+          <p
+            style={{
+              fontSize: "20px",
+              lineHeight: "1",
+              letterSpacing: "-0.02em",
+              fontWeight: "700",
+              color: "#145da3",
+            }}
+          >
+            LKR {product.price.toLocaleString("en-LK")}
+          </p>
           <span
             className="material-symbols-outlined"
             style={{
@@ -62,6 +32,25 @@ export default function ProductCard({ product, onAddToCart }) {
             {isLowStock ? "warning" : "add_circle"}
           </span>
         </div>
+        <h3
+          style={{
+            fontSize: "18px",
+            fontWeight: "600",
+            marginBottom: "4px",
+            color: "#1a1c1b",
+          }}
+        >
+          {product.name}
+        </h3>
+        <p
+          style={{
+            fontSize: "14px",
+            fontWeight: isLowStock ? "600" : "400",
+            color: isLowStock ? "#E24B4A" : "#64748B",
+          }}
+        >
+          {isLowStock ? "Low Stock: " : "Stock: "} {product.stock} Units
+        </p>
       </div>
     </div>
   );

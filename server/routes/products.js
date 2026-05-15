@@ -275,4 +275,34 @@ router.put(
   },
 );
 
+// DELETE /api/products/:id - Delete product
+router.delete(
+  "/:id",
+  async (
+    /** @type {import("express").Request} */ req,
+    /** @type {import("express").Response} */ res,
+    /** @type {import("express").NextFunction} */ next,
+  ) => {
+    try {
+      const productId = getParamString(req.params.id);
+      if (!productId) {
+        throw createHttpError("Product ID is required", 400);
+      }
+
+      await localWrite({
+        operation: "DELETE",
+        entity: "Product",
+        write: (tx) => tx.product.delete({ where: { id: productId } }),
+      });
+
+      res.json({
+        status: "success",
+        message: "Product deleted",
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 module.exports = router;
