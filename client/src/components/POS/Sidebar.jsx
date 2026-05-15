@@ -22,10 +22,6 @@ export default function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-16 h-[calc(100vh-64px)] w-60 bg-gray-50 border-r border-gray-200 flex flex-col py-4 text-sm font-medium z-40">
-      <div className="px-6 mb-6">
-        <div className="text-lg font-black text-[#1D9E75]">CeylonPOS Admin</div>
-        <div className="text-xs text-gray-500">Colombo Branch</div>
-      </div>
       <nav className="flex-1 space-y-1">
         {navItems.map((item) => (
           <button

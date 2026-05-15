@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import ProductGrid from "./ProductGrid";
 import Cart from "./Cart";
 import {
@@ -9,6 +10,7 @@ import {
 } from "../../store/apiClient";
 
 export default function POSTerminal() {
+  const navigate = useNavigate();
   const [cartItems, setCartItems] = useState([]);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -69,6 +71,11 @@ export default function POSTerminal() {
   );
 
   const handleCheckout = async () => {
+    if (selectedPaymentMethod === "CREDIT") {
+      navigate("/credit", { state: { from: "pos", balanceLKR: total } });
+      return;
+    }
+
     try {
       // Create transaction
       const { order, stockUpdates } = await createTransaction({

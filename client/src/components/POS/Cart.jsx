@@ -8,6 +8,12 @@ export default function Cart({
   onPaymentMethodChange,
 }) {
   const lowStockWarning = items.some((item) => item.stock <= 3);
+  const checkoutLabel =
+    selectedPaymentMethod === "CASH"
+      ? `Pay LKR ${total.toLocaleString("en-LK")} in cash`
+      : selectedPaymentMethod === "CREDIT"
+        ? "Open Credit Form"
+        : `Charge LKR ${total.toLocaleString("en-LK")}`;
 
   return (
     <section className="w-[30%] h-[calc(100vh-64px)] bg-white border-l border-outline-variant flex flex-col shadow-2xl relative z-10">
@@ -15,7 +21,7 @@ export default function Cart({
         <div className="bg-warning/15 border-b border-warning/20 px-6 py-3 flex items-center gap-3">
           <span className="w-2 h-2 rounded-full bg-warning animate-pulse"></span>
           <span className="font-body-md text-on-background font-medium">
-            Red raw rice is low — reorder suggested
+            Stock is low please restock soon!
           </span>
         </div>
       )}
@@ -86,12 +92,7 @@ export default function Cart({
             { label: "Cash", value: "CASH", icon: "payments", fill: true },
             { label: "Card", value: "CARD", icon: "credit_card", fill: false },
             { label: "LankaQR", value: "QR", icon: "qr_code", fill: false },
-            {
-              label: "eZ/mCash",
-              value: "WALLET",
-              icon: "account_balance_wallet",
-              fill: false,
-            },
+
             {
               label: "Bank Transfer",
               value: "BANK_TRANSFER",
@@ -108,9 +109,9 @@ export default function Cart({
             <button
               key={method.value}
               onClick={() => onPaymentMethodChange(method.value)}
-              className={`h-11 rounded-lg border font-label-caps transition-colors flex items-center justify-center gap-2 ${
+              className={`h-11 rounded-lg border font-label-caps transition-colors flex items-center justify-center gap-2 cursor-pointer ${
                 selectedPaymentMethod === method.value
-                  ? "border-primary bg-secondary-container/20 text-on-secondary-container"
+                  ? "border-[#1D9E75] bg-[#1D9E75] text-white shadow-sm"
                   : "border-outline-variant bg-surface text-on-surface hover:bg-surface-container-high"
               }`}
             >
@@ -130,7 +131,7 @@ export default function Cart({
           disabled={items.length === 0}
           className="w-full h-16 bg-[#1D9E75] text-white rounded-xl font-h1 shadow-lg hover:brightness-95 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Charge LKR {total.toLocaleString("en-LK")}
+          {checkoutLabel}
           <span className="material-symbols-outlined text-[32px]">
             arrow_forward
           </span>

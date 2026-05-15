@@ -9,7 +9,9 @@ export default function Header() {
   return (
     <header className="bg-white border-b border-gray-200 shadow-sm flex justify-between items-center h-16 px-6 w-full z-50">
       <div className="flex items-center gap-8">
-        <h1 className="text-xl font-bold text-[#1D9E75]">CeylonPOS</h1>
+        <div>
+          <div className="text-lg font-black text-[#1D9E75]">CeylonPOS</div>
+        </div>
         <div className="flex items-center gap-3 px-4 py-1.5 bg-surface-container-low rounded-full">
           <span className="material-symbols-outlined text-primary">
             account_circle

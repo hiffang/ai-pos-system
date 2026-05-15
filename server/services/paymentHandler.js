@@ -4,6 +4,7 @@
  */
 /** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
+const { localWrite } = require("./syncEngine");
 
 /**
  * @typedef {object} PaymentMetadata
@@ -76,35 +77,49 @@ async function processPayment(orderId, method, amount, metadata = {}) {
     /** @type {import("@prisma/client").PaymentStatus} */
     const paymentStatus = getInitialPaymentStatus(normalizedMethod);
 
-    // Create payment record
-    const payment = await prisma.payment.create({
-      data: {
-        orderId,
-        method: normalizedMethod,
-        status: paymentStatus,
-        amountLKR: amount,
-        changeLKR: metadata?.changeLKR,
-        gatewayRef: metadata?.gatewayRef,
-        bankRef: metadata?.bankRef,
-        walletRef: metadata?.walletRef,
-        qrPayload: metadata?.qrPayload,
-        customerName: customerName,
-        ...(paymentStatus === "COMPLETED" && { settledAt: new Date() }),
-      },
+    const payment = await localWrite({
+      operation: "INSERT",
+      entity: "Payment",
+      write: (tx) =>
+        tx.payment.create({
+          data: {
+            orderId,
+            method: normalizedMethod,
+            status: paymentStatus,
+            amountLKR: amount,
+            changeLKR: metadata?.changeLKR,
+            gatewayRef: metadata?.gatewayRef,
+            bankRef: metadata?.bankRef,
+            walletRef: metadata?.walletRef,
+            qrPayload: metadata?.qrPayload,
+            customerName: customerName,
+            ...(paymentStatus === "COMPLETED" && { settledAt: new Date() }),
+          },
+        }),
     });
 
     if (normalizedMethod === "CREDIT" && customerPhone) {
-      await prisma.customerCredit.upsert({
+      const existingCredit = await prisma.customerCredit.findUnique({
         where: { phone: customerPhone },
-        update: {
-          balanceLKR: { increment: amount },
-          customerName: customerName || "Customer",
-        },
-        create: {
-          phone: customerPhone,
-          customerName: customerName || "Customer",
-          balanceLKR: amount,
-        },
+        select: { id: true },
+      });
+
+      await localWrite({
+        operation: existingCredit ? "UPDATE" : "INSERT",
+        entity: "CustomerCredit",
+        write: (tx) =>
+          tx.customerCredit.upsert({
+            where: { phone: customerPhone },
+            update: {
+              balanceLKR: { increment: amount },
+              customerName: customerName || "Customer",
+            },
+            create: {
+              phone: customerPhone,
+              customerName: customerName || "Customer",
+              balanceLKR: amount,
+            },
+          }),
       });
     }
 
@@ -137,10 +152,14 @@ async function verifyPayHerePayment(paymentId, signature) {
       throw createHttpError("Payment not found", 404);
     }
 
-    // Update payment status
-    return await prisma.payment.update({
-      where: { id: payment.id },
-      data: { status: "COMPLETED", settledAt: new Date() },
+    return await localWrite({
+      operation: "UPDATE",
+      entity: "Payment",
+      write: (tx) =>
+        tx.payment.update({
+          where: { id: payment.id },
+          data: { status: "COMPLETED", settledAt: new Date() },
+        }),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

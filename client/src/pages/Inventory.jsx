@@ -74,7 +74,8 @@ export default function Inventory() {
 
   const categoryTotals = products.reduce((acc, product) => {
     const categoryName = product.category || "Uncategorized";
-    acc[categoryName] = (acc[categoryName] || 0) + product.stock * product.price;
+    acc[categoryName] =
+      (acc[categoryName] || 0) + product.stock * product.price;
     return acc;
   }, {});
 
@@ -90,8 +91,7 @@ export default function Inventory() {
   };
 
   const totalPages = Math.max(1, Math.ceil(totalProducts / PAGE_SIZE));
-  const pageStart =
-    totalProducts === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const pageStart = totalProducts === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
   const pageEnd = Math.min(currentPage * PAGE_SIZE, totalProducts);
 
   const getStatus = (stock, threshold) => {
@@ -179,7 +179,9 @@ export default function Inventory() {
             {topCategory || "N/A"}
           </p>
           <p className="text-sm text-gray-600 mt-2">
-            {topCategory ? `${topCategoryPercent}% of inventory value` : "No data yet"}
+            {topCategory
+              ? `${topCategoryPercent}% of inventory value`
+              : "No data yet"}
           </p>
         </div>
       </div>
@@ -237,19 +239,28 @@ export default function Inventory() {
             <tbody className="divide-y divide-gray-200">
               {productsLoading ? (
                 <tr>
-                  <td className="px-6 py-6 text-center text-gray-500" colSpan={8}>
+                  <td
+                    className="px-6 py-6 text-center text-gray-500"
+                    colSpan={8}
+                  >
                     Loading products...
                   </td>
                 </tr>
               ) : productsError ? (
                 <tr>
-                  <td className="px-6 py-6 text-center text-red-600" colSpan={8}>
+                  <td
+                    className="px-6 py-6 text-center text-red-600"
+                    colSpan={8}
+                  >
                     {productsError}
                   </td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-6 text-center text-gray-500" colSpan={8}>
+                  <td
+                    className="px-6 py-6 text-center text-gray-500"
+                    colSpan={8}
+                  >
                     No products found.
                   </td>
                 </tr>
@@ -311,9 +322,7 @@ export default function Inventory() {
           <div className="flex items-center gap-2">
             <button
               className="px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-50"
-              onClick={() =>
-                setCurrentPage((page) => Math.max(1, page - 1))
-              }
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
               disabled={currentPage === 1}
             >
               {"<"}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   fetchCustomerCredits,
   adjustCustomerCreditBalance,
@@ -7,6 +8,7 @@ import {
 } from "../store/apiClient";
 
 export default function CustomerCredit() {
+  const location = useLocation();
   const [customers, setCustomers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -23,6 +25,7 @@ export default function CustomerCredit() {
     balanceLKR: "",
   });
   const [formError, setFormError] = useState("");
+  const [prefillApplied, setPrefillApplied] = useState(false);
 
   const loadCustomers = async (searchValue = "") => {
     setIsLoading(true);
@@ -44,6 +47,19 @@ export default function CustomerCredit() {
 
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  useEffect(() => {
+    if (prefillApplied) return;
+    const balance = location.state?.balanceLKR;
+    if (location.state?.from === "pos" && balance > 0) {
+      setNewCustomer((current) => ({
+        ...current,
+        balanceLKR: balance.toFixed(2),
+      }));
+      setIsAddOpen(true);
+      setPrefillApplied(true);
+    }
+  }, [location.state, prefillApplied]);
 
   const totalCredit = customers.reduce(
     (sum, c) => sum + Number(c.balanceLKR || 0),

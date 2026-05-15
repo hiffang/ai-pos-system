@@ -23,7 +23,11 @@ export default function StatCard({
   return (
     <div
       className="bg-white p-6 rounded-xl shadow-sm border"
-      style={bordered ? { borderLeft: "4px solid #E24B4A" } : { borderColor: "transparent" }}
+      style={
+        bordered
+          ? { borderLeft: "4px solid #E24B4A" }
+          : { borderColor: "transparent" }
+      }
     >
       <p
         style={{
@@ -59,7 +63,10 @@ export default function StatCard({
           ...getColorStyle(color),
         }}
       >
-        <span className="material-symbols-outlined" style={{ fontSize: "14px", marginRight: "4px" }}>
+        <span
+          className="material-symbols-outlined"
+          style={{ fontSize: "14px", marginRight: "4px" }}
+        >
           {icon}
         </span>
         <span>{subtitle}</span>
