@@ -56,14 +56,19 @@ app.get(
   (
     /** @type {import("express").Request} */ req,
     /** @type {import("express").Response} */ res,
+    /** @type {import("express").NextFunction} */ next,
   ) => {
-    res.json({
-      status: "ok",
-      timestamp: new Date(),
-      environment: process.env.NODE_ENV,
-      aiModelStatus: getModelStatus(),
-      syncStatus: getSyncStatus(),
-    });
+    try {
+      res.json({
+        status: "ok",
+        timestamp: new Date(),
+        environment: process.env.NODE_ENV,
+        aiModelStatus: getModelStatus(),
+        syncStatus: getSyncStatus(),
+      });
+    } catch (error) {
+      next(error);
+    }
   },
 );
 
