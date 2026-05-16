@@ -42,8 +42,6 @@ export default function Dashboard() {
         todayRevenue: 0,
         ordersToday: 0,
         lowStockItems: 0,
-        pendingCreditsTotal: 0,
-        pendingCreditsCount: 0,
       }
     );
   }, [overview]);
@@ -64,7 +62,7 @@ export default function Dashboard() {
       <AIInsightStrip message={overview?.aiInsight} isLoading={isLoading} />
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           title="Today's Revenue"
           value={formatLkr(summary.todayRevenue || 0)}
@@ -93,20 +91,9 @@ export default function Dashboard() {
               ? "Action required immediately"
               : "Stock levels are healthy"
           }
-          icon="warning"
-          color="danger"
-          bordered
-        />
-        <StatCard
-          title="Pending Credits"
-          value={formatLkr(summary.pendingCreditsTotal || 0)}
-          subtitle={
-            summary.pendingCreditsCount > 0
-              ? `${summary.pendingCreditsCount} customers overdue`
-              : "No outstanding credits"
-          }
-          icon="account_balance"
-          color="tertiary"
+          icon={summary.lowStockItems > 0 ? "warning" : "inventory_2"}
+          color={summary.lowStockItems > 0 ? "danger" : "primary"}
+          bordered={summary.lowStockItems > 0}
         />
       </div>
 

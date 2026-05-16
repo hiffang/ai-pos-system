@@ -104,12 +104,7 @@ router.get(
       const fourteenDaysAgo = startOfDay(new Date(now.getTime()));
       fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 13);
 
-      const [
-        todayRevenueAgg,
-        ordersTodayCount,
-        pendingCreditsAgg,
-        pendingCreditsCount,
-      ] = await prisma.$transaction([
+      const [todayRevenueAgg, ordersTodayCount] = await prisma.$transaction([
         prisma.payment.aggregate({
           where: {
             status: "COMPLETED",
@@ -119,13 +114,6 @@ router.get(
         }),
         prisma.order.count({
           where: { createdAt: { gte: todayStart, lte: todayEnd } },
-        }),
-        prisma.customerCredit.aggregate({
-          where: { balanceLKR: { gt: 0 } },
-          _sum: { balanceLKR: true },
-        }),
-        prisma.customerCredit.count({
-          where: { balanceLKR: { gt: 0 } },
         }),
       ]);
 
@@ -199,10 +187,7 @@ router.get(
         const payment = order.payment;
         let status = "Pending";
         let statusColor = "warning";
-        if (payment?.method === "CREDIT") {
-          status = "Credit";
-          statusColor = "warning";
-        } else if (payment?.status === "COMPLETED") {
+        if (payment?.status === "COMPLETED") {
           status = "Completed";
           statusColor = "primary";
         } else if (payment?.status === "FAILED") {
@@ -286,8 +271,6 @@ router.get(
             todayRevenue: toNumber(todayRevenueAgg._sum.amountLKR),
             ordersToday: ordersTodayCount,
             lowStockItems: lowStockCount,
-            pendingCreditsTotal: toNumber(pendingCreditsAgg._sum.balanceLKR),
-            pendingCreditsCount,
           },
           salesTrend,
           paymentMethods: paymentMethodBreakdown,

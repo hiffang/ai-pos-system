@@ -11,9 +11,7 @@ export default function Cart({
   const checkoutLabel =
     selectedPaymentMethod === "CASH"
       ? `Pay LKR ${total.toLocaleString("en-LK")} in cash`
-      : selectedPaymentMethod === "CREDIT"
-        ? "Open Credit Form"
-        : `Charge LKR ${total.toLocaleString("en-LK")}`;
+      : `Charge LKR ${total.toLocaleString("en-LK")}`;
 
   return (
     <section className="w-[30%] h-[calc(100vh-64px)] bg-white border-l border-outline-variant flex flex-col shadow-2xl relative z-10">
@@ -97,12 +95,6 @@ export default function Cart({
               label: "Bank Transfer",
               value: "BANK_TRANSFER",
               icon: "account_balance",
-              fill: false,
-            },
-            {
-              label: "Credit/Tab",
-              value: "CREDIT",
-              icon: "assignment",
               fill: false,
             },
           ].map((method) => (

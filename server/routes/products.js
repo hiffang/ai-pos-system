@@ -52,6 +52,50 @@ function getParamString(value) {
   return value;
 }
 
+/**
+ * @param {string | undefined} searchValue
+ * @param {string | undefined} categoryValue
+ * @param {string | undefined} categoryIdValue
+ */
+function buildProductWhere(searchValue, categoryValue, categoryIdValue) {
+  /** @type {Array<any>} */
+  const filters = [];
+  const queryMode = /** @type {"insensitive"} */ ("insensitive");
+  if (searchValue) {
+    filters.push({
+      OR: [
+        { name: { contains: searchValue, mode: queryMode } },
+        { sku: { contains: searchValue, mode: queryMode } },
+      ],
+    });
+  }
+  if (categoryIdValue) {
+    filters.push({ categoryId: categoryIdValue });
+  }
+  if (categoryValue) {
+    filters.push({
+      category: { name: { equals: categoryValue, mode: queryMode } },
+    });
+  }
+
+  return filters.length > 0 ? { AND: filters } : undefined;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {number}
+ */
+function toNumber(value) {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return parseFloat(value);
+  if (typeof value === "object" && value && "toNumber" in value) {
+    // @ts-ignore - Decimal.js exposes toNumber.
+    return value.toNumber();
+  }
+  return Number(value);
+}
+
 // GET /api/products - List all products
 router.get(
   "/",
@@ -67,28 +111,11 @@ router.get(
       const searchValue = getQueryString(search);
       const categoryValue = getQueryString(category);
       const categoryIdValue = getQueryString(categoryId);
-
-      /** @type {Array<any>} */
-      const filters = [];
-      const queryMode = /** @type {"insensitive"} */ ("insensitive");
-      if (searchValue) {
-        filters.push({
-          OR: [
-            { name: { contains: searchValue, mode: queryMode } },
-            { sku: { contains: searchValue, mode: queryMode } },
-          ],
-        });
-      }
-      if (categoryIdValue) {
-        filters.push({ categoryId: categoryIdValue });
-      }
-      if (categoryValue) {
-        filters.push({
-          category: { name: { equals: categoryValue, mode: queryMode } },
-        });
-      }
-
-      const where = filters.length > 0 ? { AND: filters } : undefined;
+      const where = buildProductWhere(
+        searchValue,
+        categoryValue,
+        categoryIdValue,
+      );
 
       const products = await prisma.product.findMany({
         where,
@@ -98,15 +125,78 @@ router.get(
         orderBy: { name: "asc" },
       });
 
-      const total = await prisma.product.count({ where });
-
       res.json({
         status: "success",
         data: products,
         pagination: {
           skip: parsedSkip,
           take: parsedTake,
-          total,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+// GET /api/products/summary - Inventory stats for current filters
+router.get(
+  "/summary",
+  async (
+    /** @type {import("express").Request} */ req,
+    /** @type {import("express").Response} */ res,
+    /** @type {import("express").NextFunction} */ next,
+  ) => {
+    try {
+      const { search, category, categoryId } = req.query;
+      const searchValue = getQueryString(search);
+      const categoryValue = getQueryString(category);
+      const categoryIdValue = getQueryString(categoryId);
+      const where = buildProductWhere(
+        searchValue,
+        categoryValue,
+        categoryIdValue,
+      );
+
+      const products = await prisma.product.findMany({
+        where,
+        select: {
+          stockQty: true,
+          reorderThreshold: true,
+          priceLKR: true,
+          category: { select: { name: true } },
+        },
+      });
+
+      const totalStockValue = products.reduce((sum, product) => {
+        return sum + product.stockQty * toNumber(product.priceLKR);
+      }, 0);
+
+      const lowStockItems = products.filter(
+        (product) => product.stockQty <= product.reorderThreshold,
+      ).length;
+
+      /** @type {Record<string, number>} */
+      const categoryTotals = {};
+      for (const product of products) {
+        const categoryName = product.category?.name || "Uncategorized";
+        categoryTotals[categoryName] =
+          (categoryTotals[categoryName] || 0) +
+          product.stockQty * toNumber(product.priceLKR);
+      }
+
+      const [topCategory, topCategoryValue] = Object.entries(
+        categoryTotals,
+      ).sort((a, b) => b[1] - a[1])[0] || [null, 0];
+
+      res.json({
+        status: "success",
+        data: {
+          totalProducts: products.length,
+          totalStockValue,
+          lowStockItems,
+          topCategory,
+          topCategoryValue,
         },
       });
     } catch (error) {

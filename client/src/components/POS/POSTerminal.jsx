@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import ProductGrid from "./ProductGrid";
 import Cart from "./Cart";
 import {
@@ -10,7 +9,6 @@ import {
 } from "../../store/apiClient";
 
 export default function POSTerminal() {
-  const navigate = useNavigate();
   const [cartItems, setCartItems] = useState([]);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -88,11 +86,6 @@ export default function POSTerminal() {
   });
 
   const handleCheckout = async () => {
-    if (selectedPaymentMethod === "CREDIT") {
-      navigate("/credit", { state: { from: "pos", balanceLKR: total } });
-      return;
-    }
-
     try {
       // Create transaction
       const { order, stockUpdates } = await createTransaction({
@@ -181,10 +174,6 @@ export default function POSTerminal() {
                 barcode_scanner
               </span>
             </div>
-            <button className="bg-primary text-on-primary h-11 px-6 rounded-lg font-h3 shadow-sm hover:opacity-90 transition-opacity flex items-center gap-2">
-              <span className="material-symbols-outlined">add</span>
-              Custom Item
-            </button>
           </div>
 
           <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-2">

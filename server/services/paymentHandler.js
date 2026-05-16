@@ -1,6 +1,6 @@
 /**
  * Payment Handler Service
- * Processes payments for different methods: Cash, Card, Wallet, QR, Bank Transfer, Credit/Tab
+ * Processes payments for different methods: Cash, Card, Wallet, QR, Bank Transfer
  */
 /** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
@@ -14,7 +14,6 @@ const { localWrite } = require("./syncEngine");
  * @property {string} [walletRef]
  * @property {string} [qrPayload]
  * @property {string} [customerName]
- * @property {string} [customerPhone]
  */
 
 /**
@@ -65,14 +64,6 @@ async function processPayment(orderId, method, amount, metadata = {}) {
     }
 
     const customerName = metadata.customerName;
-    const customerPhone = metadata.customerPhone;
-
-    if (normalizedMethod === "CREDIT" && !customerPhone) {
-      throw createHttpError(
-        "Customer phone is required for credit/tab payments",
-        400,
-      );
-    }
 
     /** @type {import("@prisma/client").PaymentStatus} */
     const paymentStatus = getInitialPaymentStatus(normalizedMethod);
@@ -97,31 +88,6 @@ async function processPayment(orderId, method, amount, metadata = {}) {
           },
         }),
     });
-
-    if (normalizedMethod === "CREDIT" && customerPhone) {
-      const existingCredit = await prisma.customerCredit.findUnique({
-        where: { phone: customerPhone },
-        select: { id: true },
-      });
-
-      await localWrite({
-        operation: existingCredit ? "UPDATE" : "INSERT",
-        entity: "CustomerCredit",
-        write: (tx) =>
-          tx.customerCredit.upsert({
-            where: { phone: customerPhone },
-            update: {
-              balanceLKR: { increment: amount },
-              customerName: customerName || "Customer",
-            },
-            create: {
-              phone: customerPhone,
-              customerName: customerName || "Customer",
-              balanceLKR: amount,
-            },
-          }),
-      });
-    }
 
     return payment;
   } catch (error) {
@@ -184,8 +150,6 @@ function getInitialPaymentStatus(method) {
       return "PENDING"; // Requires gateway verification
     case "BANK_TRANSFER":
       return "PENDING"; // Requires manual verification
-    case "CREDIT":
-      return "COMPLETED"; // Credit recorded immediately
     default:
       return "PENDING";
   }
@@ -214,8 +178,6 @@ function normalizePaymentMethod(method) {
     case "bank_transfer":
     case "banktransfer":
       return "BANK_TRANSFER";
-    case "credit":
-      return "CREDIT";
     default:
       return null;
   }

@@ -3,6 +3,7 @@ import CategoryManager from "../components/CategoryManager";
 import {
   fetchCategories,
   fetchProductsPage,
+  fetchProductsSummary,
   updateProduct,
   deleteProduct,
 } from "../store/apiClient";
@@ -20,6 +21,12 @@ export default function Inventory() {
   const [currentPage, setCurrentPage] = useState(1);
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
+  const [summary, setSummary] = useState({
+    totalStockValue: 0,
+    lowStockItems: 0,
+    topCategory: null,
+    topCategoryValue: 0,
+  });
   const [totalProducts, setTotalProducts] = useState(0);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -60,10 +67,28 @@ export default function Inventory() {
         category: selectedCategory !== "all" ? selectedCategory : undefined,
       });
       setProducts(data);
-      setTotalProducts(pagination?.total ?? data.length);
+      const summaryData = await fetchProductsSummary({
+        search: searchTerm,
+        category: selectedCategory !== "all" ? selectedCategory : undefined,
+      });
+      setSummary({
+        totalStockValue: summaryData.totalStockValue || 0,
+        lowStockItems: summaryData.lowStockItems || 0,
+        topCategory: summaryData.topCategory || null,
+        topCategoryValue: summaryData.topCategoryValue || 0,
+      });
+      setTotalProducts(
+        summaryData.totalProducts ?? pagination?.total ?? data.length,
+      );
     } catch (error) {
       console.error("Failed to load products:", error);
       setProductsError("Failed to load products");
+      setSummary({
+        totalStockValue: 0,
+        lowStockItems: 0,
+        topCategory: null,
+        topCategoryValue: 0,
+      });
     } finally {
       setProductsLoading(false);
     }
@@ -81,23 +106,17 @@ export default function Inventory() {
     loadProducts();
   }, [loadProducts]);
 
-  const totalStockValue = products.reduce(
-    (sum, p) => sum + p.stock * p.price,
-    0,
-  );
-  const lowStockItems = products.filter(
-    (p) => p.stock > 0 && p.stock <= p.threshold,
-  ).length;
+  const totalStockValue = summary.totalStockValue || 0;
+  const lowStockItems = summary.lowStockItems || 0;
+  const lowStockAccent =
+    lowStockItems > 0 ? "text-orange-600" : "text-green-600";
+  const lowStockMessage =
+    lowStockItems > 0
+      ? "⚠️ Requires immediate attention"
+      : "Stock levels look healthy";
 
-  const categoryTotals = products.reduce((acc, product) => {
-    const categoryName = product.category || "Uncategorized";
-    acc[categoryName] =
-      (acc[categoryName] || 0) + product.stock * product.price;
-    return acc;
-  }, {});
-
-  const [topCategory, topCategoryValue] =
-    Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0] || [];
+  const topCategory = summary.topCategory;
+  const topCategoryValue = summary.topCategoryValue || 0;
   const topCategoryPercent =
     totalStockValue > 0
       ? Math.round((topCategoryValue / totalStockValue) * 100)
@@ -253,12 +272,10 @@ export default function Inventory() {
           <p className="text-gray-600 text-sm font-medium uppercase tracking-wide">
             Low Stock Items
           </p>
-          <p className="text-3xl font-bold text-orange-600 mt-2">
+          <p className={`text-3xl font-bold mt-2 ${lowStockAccent}`}>
             {lowStockItems} Items
           </p>
-          <p className="text-sm text-orange-600 mt-2">
-            ⚠️ Requires immediate attention
-          </p>
+          <p className={`text-sm mt-2 ${lowStockAccent}`}>{lowStockMessage}</p>
         </div>
 
         <div className="bg-white rounded-lg shadow p-6">

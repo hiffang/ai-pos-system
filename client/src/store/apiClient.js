@@ -24,8 +24,6 @@ function normalizePaymentMethod(method) {
     case "BANKTRANSFER":
     case "TRANSFER":
       return "BANK_TRANSFER";
-    case "CREDIT":
-      return "CREDIT";
     default:
       return undefined;
   }
@@ -165,135 +163,6 @@ export async function deleteCategory(id) {
 }
 
 /**
- * Fetch customer credit accounts
- * @param {object} options
- * @returns {Promise<array>}
- */
-export async function fetchCustomerCredits(options = {}) {
-  try {
-    const { search = "" } = options;
-    const params = new URLSearchParams({
-      ...(search && { search }),
-    });
-
-    const response = await fetch(
-      `${API_BASE}/customer-credits${params.toString() ? `?${params}` : ""}`,
-    );
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.data || [];
-  } catch (error) {
-    console.error("[API] Failed to fetch customer credits:", error);
-    return [];
-  }
-}
-
-/**
- * Create customer credit account
- * @param {object} payload
- * @returns {Promise<object>}
- */
-export async function createCustomerCredit(payload) {
-  try {
-    const response = await fetch(`${API_BASE}/customer-credits`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || `API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.data;
-  } catch (error) {
-    console.error("[API] Failed to create customer credit:", error);
-    throw error;
-  }
-}
-
-/**
- * Update customer credit account
- * @param {string} id
- * @param {object} payload
- * @returns {Promise<object>}
- */
-export async function updateCustomerCredit(id, payload) {
-  try {
-    const response = await fetch(`${API_BASE}/customer-credits/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || `API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.data;
-  } catch (error) {
-    console.error("[API] Failed to update customer credit:", error);
-    throw error;
-  }
-}
-
-/**
- * Adjust customer credit balance
- * @param {string} id
- * @param {number} amount
- * @returns {Promise<object>}
- */
-export async function adjustCustomerCreditBalance(id, amount) {
-  try {
-    const response = await fetch(`${API_BASE}/customer-credits/${id}/adjust`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || `API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.data;
-  } catch (error) {
-    console.error("[API] Failed to adjust customer credit:", error);
-    throw error;
-  }
-}
-
-/**
- * Delete customer credit account
- * @param {string} id
- * @returns {Promise<void>}
- */
-export async function deleteCustomerCredit(id) {
-  try {
-    const response = await fetch(`${API_BASE}/customer-credits/${id}`, {
-      method: "DELETE",
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || `API error: ${response.status}`);
-    }
-  } catch (error) {
-    console.error("[API] Failed to delete customer credit:", error);
-    throw error;
-  }
-}
-
-/**
  * Fetch products from backend
  * @param {object} options - Query options (search, category, pagination)
  * @returns {Promise<array>} - Products array
@@ -353,6 +222,35 @@ export async function fetchProductsPage(options = {}) {
   } catch (error) {
     console.error("[API] Failed to fetch products:", error);
     return { data: [], pagination: { skip: 0, take: 0, total: 0 } };
+  }
+}
+
+/**
+ * Fetch inventory summary metrics
+ * @param {object} options
+ * @returns {Promise<object>}
+ */
+export async function fetchProductsSummary(options = {}) {
+  try {
+    const { search = "", category } = options;
+    const params = new URLSearchParams({
+      ...(search && { search }),
+      ...(category && { category }),
+    });
+
+    const response = await fetch(
+      `${API_BASE}/products/summary${params.toString() ? `?${params}` : ""}`,
+    );
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data || {};
+  } catch (error) {
+    console.error("[API] Failed to fetch product summary:", error);
+    return {};
   }
 }
 

@@ -197,7 +197,6 @@ function getSupabaseTable(entity) {
     Product: "products",
     Category: "categories",
     User: "users",
-    CustomerCredit: "customer_credit",
     InventoryLog: "inventory_logs",
   };
 
