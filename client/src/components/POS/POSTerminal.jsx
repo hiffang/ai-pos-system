@@ -7,6 +7,7 @@ import {
   createTransaction,
   processPayment,
   fetchProductByBarcode,
+  printReceipt,
 } from "../../store/apiClient";
 
 // USB HID barcode scanners type characters as a rapid burst terminated by Enter.
@@ -156,6 +157,17 @@ export default function POSTerminal() {
         orderId: order.id,
         method: selectedPaymentMethod,
         amount: total,
+      });
+
+      // Fire-and-log receipt print. Failures must never block checkout —
+      // the sale is already complete; the cashier can manually re-print
+      // from the Recent Transactions list if the printer is offline.
+      printReceipt(order.id).then((result) => {
+        if (!result) {
+          console.warn(
+            "[POS] Receipt print failed — payment already complete",
+          );
+        }
       });
 
       if (stockUpdates.length > 0) {

@@ -31,6 +31,7 @@
     "express-rate-limit": "^8.4.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
+    "node-thermal-printer": "^4.6.0",
     "onnxruntime-node": "^1.25.1",
     "pg": "^8.12.1",
     "prisma": "^4.15.0",

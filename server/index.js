@@ -14,11 +14,16 @@ const prisma = require("./db");
 const errorHandler = require("./middleware/errorHandler");
 const { initializeSession, getModelStatus } = require("./services/aiInference");
 const { startSyncDaemon, getSyncStatus } = require("./services/syncDaemon");
+const {
+  loadActive: loadPrinter,
+  getPrinterStatus,
+} = require("./services/hardware/printerRegistry");
 
 // Import routes
 const aiRoutes = require("./routes/ai");
 const categoriesRoutes = require("./routes/categories");
 const dashboardRoutes = require("./routes/dashboard");
+const hardwareRoutes = require("./routes/hardware");
 const paymentsRoutes = require("./routes/payments");
 const productsRoutes = require("./routes/products");
 const transactionsRoutes = require("./routes/transactions");
@@ -66,6 +71,7 @@ app.get(
         environment: process.env.NODE_ENV,
         aiModelStatus: getModelStatus(),
         syncStatus: getSyncStatus(),
+        printerStatus: getPrinterStatus(),
       });
     } catch (error) {
       next(error);
@@ -77,6 +83,7 @@ app.get(
 app.use("/api/ai", aiRoutes);
 app.use("/api/categories", categoriesRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/hardware", hardwareRoutes);
 app.use("/api/payments", paymentsRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/transactions", transactionsRoutes);
@@ -113,6 +120,20 @@ async function start() {
         message,
       );
       console.warn("[Server] Continuing without AI features");
+    }
+
+    // Initialize printer (non-critical — receipt printing fails gracefully if unavailable)
+    try {
+      await loadPrinter();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        "[Server] Printer initialization failed (non-critical):",
+        message,
+      );
+      console.warn(
+        "[Server] Continuing without receipt printing. Set printer.type='noop' in printerConfig.json for a logging-only fallback.",
+      );
     }
 
     // Start sync daemon for offline-first

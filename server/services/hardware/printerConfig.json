@@ -1,0 +1,18 @@
+{
+  "$note": "Thermal printer + cash drawer config. Change 'printer.type' to switch adapters; see server/services/hardware/adapters/. Use 'noop' for development without hardware — the formatted receipt is logged to the server console.",
+
+  "shop": {
+    "name": "Your Shop Name",
+    "address": "Colombo, Sri Lanka",
+    "phone": "",
+    "footer": "Thank you, come again!"
+  },
+
+  "printer": {
+    "type": "noop",
+    "interface": "tcp://192.168.1.100:9100",
+    "paperWidthChars": 48,
+    "openDrawer": true,
+    "$interface_notes": "type=escpos accepts: tcp://HOST:PORT (network), printer:NAME (Windows spooler), /dev/usb/lp0 or COM1 (serial). For type=noop, interface is ignored."
+  }
+}

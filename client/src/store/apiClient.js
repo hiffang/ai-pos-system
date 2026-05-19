@@ -440,6 +440,34 @@ export async function processPayment(payment) {
 }
 
 /**
+ * Print a receipt for an existing order via the configured thermal printer.
+ * Resolves with { ok: true } on success, or null on any failure — printing
+ * failures must never block the POS workflow.
+ * @param {string} orderId
+ * @returns {Promise<object|null>}
+ */
+export async function printReceipt(orderId) {
+  try {
+    const response = await fetch(`${API_BASE}/hardware/print-receipt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId }),
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || `API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data || { ok: true };
+  } catch (error) {
+    console.error("[API] Failed to print receipt:", error);
+    return null;
+  }
+}
+
+/**
  * Get server health and sync status
  * @returns {Promise<object>} - Health status
  */
