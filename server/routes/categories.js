@@ -97,10 +97,13 @@ router.post(
         throw createHttpError("Category name is required", 400);
       }
 
-      // Check for duplicate
-      const existing = await prisma.category.findFirst({
-        where: { name: { mode: "insensitive", equals: name } },
-      });
+      // SQLite has no case-insensitive equals; collate at the SQL level via raw query.
+      const existingRows = await prisma.$queryRaw`
+        SELECT id FROM Category WHERE name = ${name} COLLATE NOCASE LIMIT 1
+      `;
+      const existing = Array.isArray(existingRows) && existingRows.length > 0
+        ? existingRows[0]
+        : null;
 
       if (existing) {
         throw createHttpError("Category already exists", 409);

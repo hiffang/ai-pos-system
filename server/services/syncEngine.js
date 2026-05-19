@@ -19,7 +19,7 @@ const prisma = require("../db");
  * @param {unknown} value
  */
 function toJson(value) {
-  return JSON.parse(JSON.stringify(value));
+  return JSON.stringify(value);
 }
 
 /**

@@ -134,14 +134,21 @@ async function syncPendingOutbox() {
  * @param {object} entry - Outbox entry
  */
 /**
- * @param {{ id: string, entity: string, entityId: string, operation: string, payload: any }} entry
+ * @param {{ id: string, entity: string, entityId: string, operation: string, payload: string }} entry
  */
 async function syncEntry(entry) {
   if (!supabase) {
     throw new Error("Supabase client not configured");
   }
 
-  const { entity, entityId, operation, payload } = entry;
+  const { entity, entityId, operation } = entry;
+  let payload;
+  try {
+    payload = entry.payload ? JSON.parse(entry.payload) : {};
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Invalid outbox payload JSON for ${entry.id}: ${message}`);
+  }
 
   // Map operation to Supabase table
   const table = getSupabaseTable(entity);

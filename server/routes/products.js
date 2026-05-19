@@ -60,12 +60,11 @@ function getParamString(value) {
 function buildProductWhere(searchValue, categoryValue, categoryIdValue) {
   /** @type {Array<any>} */
   const filters = [];
-  const queryMode = /** @type {"insensitive"} */ ("insensitive");
   if (searchValue) {
     filters.push({
       OR: [
-        { name: { contains: searchValue, mode: queryMode } },
-        { sku: { contains: searchValue, mode: queryMode } },
+        { name: { contains: searchValue } },
+        { sku: { contains: searchValue } },
       ],
     });
   }
@@ -73,9 +72,7 @@ function buildProductWhere(searchValue, categoryValue, categoryIdValue) {
     filters.push({ categoryId: categoryIdValue });
   }
   if (categoryValue) {
-    filters.push({
-      category: { name: { equals: categoryValue, mode: queryMode } },
-    });
+    filters.push({ category: { name: categoryValue } });
   }
 
   return filters.length > 0 ? { AND: filters } : undefined;
