@@ -202,6 +202,39 @@ router.get(
   },
 );
 
+// GET /api/products/by-barcode/:code - Look up product by barcode (for scanner input)
+router.get(
+  "/by-barcode/:code",
+  async (
+    /** @type {import("express").Request} */ req,
+    /** @type {import("express").Response} */ res,
+    /** @type {import("express").NextFunction} */ next,
+  ) => {
+    try {
+      const code = getParamString(req.params.code);
+      if (!code) {
+        throw createHttpError("Barcode is required", 400);
+      }
+
+      const product = await prisma.product.findUnique({
+        where: { barcode: code },
+        include: { category: true },
+      });
+
+      if (!product) {
+        throw createHttpError("Barcode not found", 404);
+      }
+
+      res.json({
+        status: "success",
+        data: product,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 // GET /api/products/:id - Get single product
 router.get(
   "/:id",
@@ -247,6 +280,7 @@ router.post(
       const {
         name,
         sku,
+        barcode,
         priceLKR,
         stockQty,
         reorderThreshold,
@@ -260,6 +294,10 @@ router.post(
       const priceValue = priceLKR ?? price;
       const stockValue = stockQty ?? quantity ?? stock;
       const thresholdValue = reorderThreshold ?? threshold;
+      const normalizedBarcode =
+        typeof barcode === "string" && barcode.trim() !== ""
+          ? barcode.trim()
+          : null;
 
       if (!name || !sku || priceValue === undefined || priceValue === null) {
         throw createHttpError("Name, SKU, and price are required", 400);
@@ -277,6 +315,7 @@ router.post(
             data: {
               name,
               sku,
+              barcode: normalizedBarcode,
               priceLKR: parseFloat(priceValue),
               stockQty:
                 stockValue !== undefined && stockValue !== null
@@ -312,6 +351,7 @@ router.put(
     try {
       const {
         name,
+        barcode,
         priceLKR,
         stockQty,
         reorderThreshold,
@@ -325,6 +365,15 @@ router.put(
       const priceValue = priceLKR ?? price;
       const stockValue = stockQty ?? quantity ?? stock;
       const thresholdValue = reorderThreshold ?? threshold;
+      // For barcode: undefined → leave alone; null/"" → clear; otherwise → set
+      const barcodeProvided = Object.prototype.hasOwnProperty.call(
+        req.body,
+        "barcode",
+      );
+      const normalizedBarcode =
+        typeof barcode === "string" && barcode.trim() !== ""
+          ? barcode.trim()
+          : null;
 
       const productId = getParamString(req.params.id);
       if (!productId) {
@@ -339,6 +388,7 @@ router.put(
             where: { id: productId },
             data: {
               ...(name && { name }),
+              ...(barcodeProvided && { barcode: normalizedBarcode }),
               ...(priceValue !== undefined &&
                 priceValue !== null && { priceLKR: parseFloat(priceValue) }),
               ...(stockValue !== undefined &&

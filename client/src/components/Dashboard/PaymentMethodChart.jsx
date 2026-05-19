@@ -27,7 +27,7 @@ export default function PaymentMethodChart({
   const hasData = methods.some((method) => (method.percentage || 0) > 0);
   const radius = 80;
   const circumference = 2 * Math.PI * radius;
-  let cumulative = 0;
+  let cumulativeDash = 0;
 
   return (
     <div className="bg-surface p-6 rounded-xl shadow-sm flex flex-col">
@@ -45,8 +45,8 @@ export default function PaymentMethodChart({
           {methods.map((method) => {
             const percentage = method.percentage || 0;
             const dash = (percentage / 100) * circumference;
-            const offset = circumference - (cumulative / 100) * circumference;
-            cumulative += percentage;
+            const offset = -cumulativeDash;
+            cumulativeDash += dash;
 
             return (
               <circle
@@ -56,7 +56,7 @@ export default function PaymentMethodChart({
                 fill="transparent"
                 r="80"
                 stroke={METHOD_COLORS[method.method] || "#64748b"}
-                strokeDasharray={`${dash} ${circumference}`}
+                strokeDasharray={`${dash} ${circumference - dash}`}
                 strokeDashoffset={offset}
                 strokeWidth="24"
               />

@@ -13,9 +13,12 @@ const categories = [
   "Fresh Produce",
 ];
 
+// Barcodes use the Sri Lankan EAN-13 country prefix (479). Fresh produce sold
+// by weight typically has no manufacturer barcode and is left null.
 const products = [
   {
     sku: "DAIRY-001",
+    barcode: "4792024000018",
     name: "Anchor Full Cream Milk 1L",
     category: "Dairy & Chilled",
     priceLKR: "1200.00",
@@ -24,6 +27,7 @@ const products = [
   },
   {
     sku: "DAIRY-002",
+    barcode: "4792024000025",
     name: "Kotmale Yogurt 80g",
     category: "Dairy & Chilled",
     priceLKR: "90.00",
@@ -32,6 +36,7 @@ const products = [
   },
   {
     sku: "BEV-001",
+    barcode: "4792024000032",
     name: "Dilmah Ceylon Tea 200g",
     category: "Beverages",
     priceLKR: "840.00",
@@ -40,6 +45,7 @@ const products = [
   },
   {
     sku: "BEV-002",
+    barcode: "4792024000049",
     name: "Coca-Cola 1.5L",
     category: "Beverages",
     priceLKR: "320.00",
@@ -48,6 +54,7 @@ const products = [
   },
   {
     sku: "HOUSE-001",
+    barcode: "4792024000056",
     name: "Sunlight Washing Powder 1kg",
     category: "Household",
     priceLKR: "420.00",
@@ -56,6 +63,7 @@ const products = [
   },
   {
     sku: "HOUSE-002",
+    barcode: "4792024000063",
     name: "Lysol Disinfectant 500ml",
     category: "Household",
     priceLKR: "560.00",
@@ -64,6 +72,7 @@ const products = [
   },
   {
     sku: "CEREAL-001",
+    barcode: "4792024000070",
     name: "Munchee Super Cream Cracker",
     category: "Dry Cereals",
     priceLKR: "270.00",
@@ -72,6 +81,7 @@ const products = [
   },
   {
     sku: "CEREAL-002",
+    barcode: "4792024000087",
     name: "Prima Flour 1kg",
     category: "Dry Cereals",
     priceLKR: "260.00",
@@ -80,6 +90,7 @@ const products = [
   },
   {
     sku: "SPICE-001",
+    barcode: "4792024000094",
     name: "MDH Chilli Powder 200g",
     category: "Spices",
     priceLKR: "480.00",
@@ -88,6 +99,7 @@ const products = [
   },
   {
     sku: "SPICE-002",
+    barcode: "4792024000100",
     name: "Turmeric Powder 100g",
     category: "Spices",
     priceLKR: "230.00",
@@ -96,6 +108,7 @@ const products = [
   },
   {
     sku: "RICE-001",
+    barcode: "4792024000117",
     name: "Keells Samba Rice 5kg",
     category: "Rice & Grains",
     priceLKR: "2350.00",
@@ -104,6 +117,7 @@ const products = [
   },
   {
     sku: "SNACK-001",
+    barcode: "4792024000124",
     name: "Munchee Chocolate Biscuit",
     category: "Snacks",
     priceLKR: "180.00",
@@ -112,6 +126,7 @@ const products = [
   },
   {
     sku: "PROD-001",
+    barcode: null,
     name: "Banana - 1kg",
     category: "Fresh Produce",
     priceLKR: "320.00",
@@ -140,6 +155,7 @@ async function main() {
       where: { sku: product.sku },
       update: {
         name: product.name,
+        barcode: product.barcode ?? null,
         priceLKR: product.priceLKR,
         stockQty: product.stockQty,
         reorderThreshold: product.reorderThreshold,
@@ -147,6 +163,7 @@ async function main() {
       },
       create: {
         sku: product.sku,
+        barcode: product.barcode ?? null,
         name: product.name,
         priceLKR: product.priceLKR,
         stockQty: product.stockQty,

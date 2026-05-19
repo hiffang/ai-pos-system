@@ -166,7 +166,11 @@ router.get(
 
       const order = await prisma.order.findUnique({
         where: { id: orderId },
-        include: { items: true, payment: true, user: true },
+        include: {
+          items: { include: { product: { select: { name: true, sku: true } } } },
+          payment: true,
+          user: { select: { id: true, name: true, role: true } },
+        },
       });
 
       if (!order) {

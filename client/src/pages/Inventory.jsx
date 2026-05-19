@@ -81,6 +81,7 @@ export default function Inventory() {
   const [editForm, setEditForm] = useState({
     name: "",
     sku: "",
+    barcode: "",
     priceLKR: "",
     stockQty: "",
     reorderThreshold: "",
@@ -226,6 +227,7 @@ export default function Inventory() {
     setEditForm({
       name: product.name || "",
       sku: product.sku || "",
+      barcode: product.barcode || "",
       priceLKR: product.price?.toString() || "",
       stockQty: product.stock?.toString() || "",
       reorderThreshold: product.threshold?.toString() || "",
@@ -267,6 +269,7 @@ export default function Inventory() {
       await updateProduct(activeProduct.id, {
         name: editForm.name,
         sku: editForm.sku,
+        barcode: editForm.barcode.trim(),
         priceLKR: parsedPrice,
         stockQty: parsedStock,
         reorderThreshold: parsedThreshold,
@@ -608,6 +611,20 @@ export default function Inventory() {
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
                   value={editForm.sku}
                   onChange={(e) => handleEditChange("sku", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Barcode
+                  <span className="text-gray-400 font-normal ml-1">
+                    (scan or type, leave empty for none)
+                  </span>
+                </label>
+                <input
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  placeholder="e.g. 4792024000018"
+                  value={editForm.barcode}
+                  onChange={(e) => handleEditChange("barcode", e.target.value)}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">

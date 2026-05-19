@@ -38,6 +38,7 @@ model Product {
   category         Category       @relation(fields: [categoryId], references: [id])
   name             String
   sku              String         @unique
+  barcode          String?        @unique
   priceLKR         Decimal
   stockQty         Int
   reorderThreshold Int            @default(10)

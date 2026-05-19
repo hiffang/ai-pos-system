@@ -1,6 +1,7 @@
 export default function TransactionsList({
   transactions = [],
   isLoading = false,
+  onSelect,
 }) {
   const formatLkr = (amount) =>
     `LKR ${amount.toLocaleString("en-LK", {
@@ -86,6 +87,15 @@ export default function TransactionsList({
                 <div
                   key={tx.id}
                   className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSelect?.(tx)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelect?.(tx);
+                    }
+                  }}
                 >
                   <div className="flex items-center">
                     <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center mr-4">

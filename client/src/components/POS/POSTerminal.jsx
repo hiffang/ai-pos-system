@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import ProductGrid from "./ProductGrid";
 import Cart from "./Cart";
 import {
@@ -6,7 +6,14 @@ import {
   fetchCategories,
   createTransaction,
   processPayment,
+  fetchProductByBarcode,
 } from "../../store/apiClient";
+
+// USB HID barcode scanners type characters as a rapid burst terminated by Enter.
+// 50ms between keys is well above typical scanner speed (~5ms) and well below
+// human typing (~150-200ms), so it cleanly separates scans from manual input.
+const SCAN_KEY_GAP_MS = 50;
+const MIN_BARCODE_LENGTH = 8;
 
 export default function POSTerminal() {
   const [cartItems, setCartItems] = useState([]);
@@ -35,20 +42,66 @@ export default function POSTerminal() {
     loadData();
   }, []);
 
-  const addToCart = (product) => {
-    const existing = cartItems.find((item) => item.id === product.id);
-    if (existing) {
-      setCartItems(
-        cartItems.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item,
-        ),
-      );
-    } else {
-      setCartItems([...cartItems, { ...product, quantity: 1 }]);
-    }
-  };
+  const addToCart = useCallback((product) => {
+    setCartItems((items) => {
+      const existing = items.find((it) => it.id === product.id);
+      if (existing) {
+        return items.map((it) =>
+          it.id === product.id ? { ...it, quantity: it.quantity + 1 } : it,
+        );
+      }
+      return [...items, { ...product, quantity: 1 }];
+    });
+  }, []);
+
+  const handleScan = useCallback(
+    async (code) => {
+      const product = await fetchProductByBarcode(code);
+      if (!product) {
+        alert(`Unknown barcode: ${code}`);
+        return;
+      }
+      if (product.stock <= 0) {
+        alert(`${product.name} is out of stock`);
+        return;
+      }
+      setSearchTerm("");
+      addToCart(product);
+    },
+    [addToCart],
+  );
+
+  useEffect(() => {
+    let buffer = "";
+    let lastKeyAt = 0;
+
+    const onKeyDown = (e) => {
+      const now = Date.now();
+      const gap = now - lastKeyAt;
+      lastKeyAt = now;
+
+      if (gap > SCAN_KEY_GAP_MS) {
+        buffer = "";
+      }
+
+      if (e.key === "Enter") {
+        const candidate = buffer;
+        buffer = "";
+        if (candidate.length >= MIN_BARCODE_LENGTH && /^\d+$/.test(candidate)) {
+          e.preventDefault();
+          handleScan(candidate);
+        }
+        return;
+      }
+
+      if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleScan]);
 
   const updateQuantity = (id, quantity) => {
     if (quantity <= 0) {

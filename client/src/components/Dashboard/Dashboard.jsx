@@ -4,12 +4,35 @@ import SalesChart from "./SalesChart";
 import PaymentMethodChart from "./PaymentMethodChart";
 import DemandForecastTable from "./DemandForecastTable";
 import TransactionsList from "./TransactionsList";
-import { fetchDashboardOverview } from "../../store/apiClient";
-import { useEffect, useMemo, useState } from "react";
+import ReceiptModal from "./ReceiptModal";
+import {
+  fetchDashboardOverview,
+  fetchTransactionById,
+} from "../../store/apiClient";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function Dashboard() {
   const [overview, setOverview] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [receipt, setReceipt] = useState(null);
+  const [receiptLoading, setReceiptLoading] = useState(false);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+
+  const handleSelectTransaction = useCallback(async (tx) => {
+    if (!tx?.id) return;
+    setReceiptOpen(true);
+    setReceipt(null);
+    setReceiptLoading(true);
+    const full = await fetchTransactionById(tx.id);
+    setReceipt(full);
+    setReceiptLoading(false);
+  }, []);
+
+  const handleCloseReceipt = useCallback(() => {
+    setReceiptOpen(false);
+    setReceipt(null);
+    setReceiptLoading(false);
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -117,8 +140,17 @@ export default function Dashboard() {
         <TransactionsList
           transactions={overview?.recentTransactions || []}
           isLoading={isLoading}
+          onSelect={handleSelectTransaction}
         />
       </div>
+
+      {receiptOpen ? (
+        <ReceiptModal
+          transaction={receipt}
+          isLoading={receiptLoading}
+          onClose={handleCloseReceipt}
+        />
+      ) : null}
     </div>
   );
 }

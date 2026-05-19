@@ -64,6 +64,7 @@ function normalizeProduct(product) {
     threshold: normalizedThreshold,
     category: categoryName,
     sku: product.sku ?? product.id,
+    barcode: product.barcode ?? null,
     status,
   };
 }
@@ -276,6 +277,34 @@ export async function fetchProductById(id) {
 }
 
 /**
+ * Look up a product by its scanned barcode. Resolves null on 404 so the caller
+ * can render a "not registered" toast without exception handling.
+ * @param {string} code
+ * @returns {Promise<object|null>}
+ */
+export async function fetchProductByBarcode(code) {
+  try {
+    const response = await fetch(
+      `${API_BASE}/products/by-barcode/${encodeURIComponent(code)}`,
+    );
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data ? normalizeProduct(data.data) : null;
+  } catch (error) {
+    console.error("[API] Failed to fetch product by barcode:", error);
+    return null;
+  }
+}
+
+/**
  * Update a product
  * @param {string} id
  * @param {object} payload
@@ -349,6 +378,34 @@ export async function createTransaction(transaction) {
   } catch (error) {
     console.error("[API] Failed to create transaction:", error);
     throw error;
+  }
+}
+
+/**
+ * Fetch a single transaction (order) by ID with items, product info,
+ * payment, and cashier. Used by the receipt detail view.
+ * @param {string} id
+ * @returns {Promise<object|null>}
+ */
+export async function fetchTransactionById(id) {
+  try {
+    const response = await fetch(
+      `${API_BASE}/transactions/${encodeURIComponent(id)}`,
+    );
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data || null;
+  } catch (error) {
+    console.error("[API] Failed to fetch transaction:", error);
+    return null;
   }
 }
 
