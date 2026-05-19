@@ -402,6 +402,59 @@ export async function getServerHealth() {
 }
 
 /**
+ * Fetch AI demand forecast for a single product
+ * @param {string} productId
+ * @returns {Promise<object|null>} - Prediction object or null
+ */
+export async function fetchProductForecast(productId) {
+  try {
+    const response = await fetch(`${API_BASE}/ai/forecast/${productId}`);
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data || null;
+  } catch (error) {
+    console.error("[API] Failed to fetch product forecast:", error);
+    return null;
+  }
+}
+
+/**
+ * Fetch AI demand forecasts for a batch of products
+ * @param {string[]} productIds
+ * @returns {Promise<{ data: object[], missing: string[] }>}
+ */
+export async function fetchBatchForecasts(productIds) {
+  try {
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return { data: [], missing: [] };
+    }
+
+    const response = await fetch(`${API_BASE}/ai/forecast/batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productIds }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return {
+      data: data.data || [],
+      missing: data.missing || [],
+    };
+  } catch (error) {
+    console.error("[API] Failed to fetch batch forecasts:", error);
+    return { data: [], missing: productIds };
+  }
+}
+
+/**
  * Fetch dashboard overview metrics
  * @returns {Promise<object>} - Dashboard data
  */

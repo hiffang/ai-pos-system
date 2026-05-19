@@ -6,6 +6,7 @@ import {
   fetchProductsSummary,
   updateProduct,
   deleteProduct,
+  fetchBatchForecasts,
 } from "../store/apiClient";
 
 const STATUS_COLORS = {
@@ -13,7 +14,50 @@ const STATUS_COLORS = {
   "Low Stock": "bg-yellow-100 text-yellow-700",
   "Out of Stock": "bg-red-100 text-red-700",
 };
+const DEMAND_COLORS = {
+  very_low: "bg-gray-100 text-gray-600",
+  low: "bg-blue-100 text-blue-700",
+  medium: "bg-green-100 text-green-700",
+  high: "bg-yellow-100 text-yellow-700",
+  very_high: "bg-red-100 text-red-700",
+};
+const DEMAND_LABELS = {
+  very_low: "Very Low",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  very_high: "Very High",
+};
+const TREND_ICONS = {
+  increasing: "↑",
+  stable: "→",
+  decreasing: "↓",
+};
 const PAGE_SIZE = 8;
+
+function buildAiInsight(predictions, products) {
+  if (!predictions || predictions.length === 0) return null;
+  const productById = new Map(products.map((p) => [p.id, p]));
+  let best = null;
+  let bestScore = -Infinity;
+  for (const prediction of predictions) {
+    const product = productById.get(prediction.productId);
+    if (!product) continue;
+    const exposure = (prediction.point - product.stock) * prediction.confidence;
+    if (exposure > bestScore) {
+      bestScore = exposure;
+      best = { prediction, product };
+    }
+  }
+  if (!best || bestScore <= 0) return null;
+  return {
+    productName: best.product.name,
+    forecast: Math.round(best.prediction.point),
+    stock: best.product.stock,
+    trend: best.prediction.trend,
+    demandLevel: best.prediction.demandLevel,
+  };
+}
 
 export default function Inventory() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -43,6 +87,9 @@ export default function Inventory() {
     categoryId: "",
   });
   const [formError, setFormError] = useState("");
+  const [forecasts, setForecasts] = useState({});
+  const [forecastsLoading, setForecastsLoading] = useState(false);
+  const [aiInsight, setAiInsight] = useState(null);
 
   const loadCategories = useCallback(async () => {
     setCategoriesLoading(true);
@@ -105,6 +152,32 @@ export default function Inventory() {
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);
+
+  useEffect(() => {
+    if (products.length === 0) {
+      setForecasts({});
+      setAiInsight(null);
+      return;
+    }
+    let cancelled = false;
+    setForecastsLoading(true);
+    fetchBatchForecasts(products.map((p) => p.id))
+      .then(({ data }) => {
+        if (cancelled) return;
+        const next = {};
+        for (const prediction of data) {
+          if (prediction.productId) next[prediction.productId] = prediction;
+        }
+        setForecasts(next);
+        setAiInsight(buildAiInsight(data, products));
+      })
+      .finally(() => {
+        if (!cancelled) setForecastsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [products]);
 
   const totalStockValue = summary.totalStockValue || 0;
   const lowStockItems = summary.lowStockItems || 0;
@@ -236,25 +309,32 @@ export default function Inventory() {
       </div>
 
       {/* Inventory Insights Banner */}
-      <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded flex items-start justify-between">
-        <div className="flex items-start gap-3">
-          <span className="material-symbols-outlined text-orange-600 mt-0.5">
-            lightbulb
-          </span>
-          <div>
-            <h3 className="font-semibold text-orange-800">
-              ⚡ AI Stock Prediction Alert
-            </h3>
-            <p className="text-sm text-orange-700 mt-1">
-              Based on historical trends, demand for "Dairieggs" is expected to
-              rise 25% next week. Consider increasing stock now.
-            </p>
+      {aiInsight ? (
+        <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded flex items-start justify-between">
+          <div className="flex items-start gap-3">
+            <span className="material-symbols-outlined text-orange-600 mt-0.5">
+              lightbulb
+            </span>
+            <div>
+              <h3 className="font-semibold text-orange-800">
+                ⚡ AI Stock Prediction Alert
+              </h3>
+              <p className="text-sm text-orange-700 mt-1">
+                Forecast for <strong>{aiInsight.productName}</strong> is{" "}
+                {aiInsight.forecast} units over the next 7 days
+                {aiInsight.trend !== "stable"
+                  ? ` (trend ${aiInsight.trend})`
+                  : ""}{" "}
+                — current stock is {aiInsight.stock}. Consider reordering.
+              </p>
+            </div>
           </div>
         </div>
-        <button className="px-3 py-1 bg-orange-500 text-white rounded text-sm font-medium hover:bg-orange-600">
-          View details
-        </button>
-      </div>
+      ) : forecastsLoading ? (
+        <div className="bg-gray-50 border-l-4 border-gray-300 p-4 rounded text-sm text-gray-600">
+          Loading AI demand forecasts…
+        </div>
+      ) : null}
 
       {/* Bottom Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -340,6 +420,7 @@ export default function Inventory() {
                 <th className="px-6 py-3">Stock</th>
                 <th className="px-6 py-3">Threshold</th>
                 <th className="px-6 py-3">Status</th>
+                <th className="px-6 py-3">Forecast (7d)</th>
                 <th className="px-6 py-3">Actions</th>
               </tr>
             </thead>
@@ -348,7 +429,7 @@ export default function Inventory() {
                 <tr>
                   <td
                     className="px-6 py-6 text-center text-gray-500"
-                    colSpan={8}
+                    colSpan={9}
                   >
                     Loading products...
                   </td>
@@ -357,7 +438,7 @@ export default function Inventory() {
                 <tr>
                   <td
                     className="px-6 py-6 text-center text-red-600"
-                    colSpan={8}
+                    colSpan={9}
                   >
                     {productsError}
                   </td>
@@ -366,7 +447,7 @@ export default function Inventory() {
                 <tr>
                   <td
                     className="px-6 py-6 text-center text-gray-500"
-                    colSpan={8}
+                    colSpan={9}
                   >
                     No products found.
                   </td>
@@ -374,6 +455,7 @@ export default function Inventory() {
               ) : (
                 products.map((product) => {
                   const status = getStatus(product.stock, product.threshold);
+                  const forecast = forecasts[product.id];
                   return (
                     <tr key={product.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 font-mono text-gray-700">
@@ -400,6 +482,26 @@ export default function Inventory() {
                         >
                           {status}
                         </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {forecast ? (
+                          <div className="flex flex-col gap-1">
+                            <span
+                              className={`inline-flex w-fit items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${DEMAND_COLORS[forecast.demandLevel] || "bg-gray-100 text-gray-600"}`}
+                            >
+                              {DEMAND_LABELS[forecast.demandLevel] ||
+                                forecast.demandLevel}{" "}
+                              {TREND_ICONS[forecast.trend] || ""}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              ~{Math.round(forecast.point)} units
+                            </span>
+                          </div>
+                        ) : forecastsLoading ? (
+                          <span className="text-xs text-gray-400">…</span>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 flex items-center gap-2">
                         <button

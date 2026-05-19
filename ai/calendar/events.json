@@ -1,0 +1,74 @@
+{
+  "$schema": "Sri Lankan calendar events used by ai/calendar/sriLankaCalendar.{js,py}",
+  "$note": "Poya, Eid, and Deepavali dates are lunar and MUST be verified against the official Sri Lankan government gazette (gov.lk) before training each year. The values seeded below are placeholders.",
+
+  "fixedPublicHolidays": [
+    { "month": 1,  "day": 1,  "name": "New Year's Day" },
+    { "month": 2,  "day": 4,  "name": "Independence Day" },
+    { "month": 5,  "day": 1,  "name": "May Day" },
+    { "month": 12, "day": 25, "name": "Christmas Day" }
+  ],
+
+  "sinhalaTamilNewYear": {
+    "$note": "Always Apr 13-14 by gazette.",
+    "month": 4,
+    "days": [13, 14],
+    "preWindowDays": 14
+  },
+
+  "poyaDays": {
+    "$note": "PLACEHOLDER full-moon dates. Replace with gazette dates before retraining.",
+    "2025": [
+      "2025-01-13", "2025-02-12", "2025-03-13", "2025-04-12",
+      "2025-05-12", "2025-06-10", "2025-07-10", "2025-08-08",
+      "2025-09-07", "2025-10-06", "2025-11-05", "2025-12-04"
+    ],
+    "2026": [
+      "2026-01-03", "2026-02-01", "2026-03-03", "2026-04-01",
+      "2026-05-01", "2026-05-31", "2026-06-29", "2026-07-29",
+      "2026-08-27", "2026-09-26", "2026-10-25", "2026-11-24",
+      "2026-12-23"
+    ],
+    "2027": [
+      "2027-01-22", "2027-02-20", "2027-03-22", "2027-04-20",
+      "2027-05-20", "2027-06-19", "2027-07-18", "2027-08-17",
+      "2027-09-15", "2027-10-15", "2027-11-13", "2027-12-13"
+    ]
+  },
+
+  "islamicFestivals": {
+    "$note": "PLACEHOLDER lunar dates. Verify annually.",
+    "eidAlFitr": {
+      "2025": { "date": "2025-03-31", "preWindowDays": 14 },
+      "2026": { "date": "2026-03-20", "preWindowDays": 14 },
+      "2027": { "date": "2027-03-10", "preWindowDays": 14 }
+    },
+    "eidAlAdha": {
+      "2025": "2025-06-07",
+      "2026": "2026-05-27",
+      "2027": "2027-05-17"
+    }
+  },
+
+  "deepavali": {
+    "$note": "PLACEHOLDER. Verify annually.",
+    "2025": "2025-10-20",
+    "2026": "2026-11-08",
+    "2027": "2027-10-29"
+  },
+
+  "christmas": {
+    "preWindowDays": 14
+  },
+
+  "monsoonSeasons": {
+    "yala": { "startMonth": 5,  "endMonth": 8 },
+    "maha": { "startMonth": 10, "endMonth": 1 }
+  },
+
+  "salaryWindow": {
+    "$note": "End-of-month payday window (wraps across months): day >= startDay OR day <= endDay.",
+    "startDay": 25,
+    "endDay": 5
+  }
+}

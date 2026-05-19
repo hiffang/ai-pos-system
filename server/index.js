@@ -16,6 +16,7 @@ const { initializeSession, getModelStatus } = require("./services/aiInference");
 const { startSyncDaemon, getSyncStatus } = require("./services/syncDaemon");
 
 // Import routes
+const aiRoutes = require("./routes/ai");
 const categoriesRoutes = require("./routes/categories");
 const dashboardRoutes = require("./routes/dashboard");
 const paymentsRoutes = require("./routes/payments");
@@ -73,6 +74,7 @@ app.get(
 );
 
 // API Routes
+app.use("/api/ai", aiRoutes);
 app.use("/api/categories", categoriesRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/payments", paymentsRoutes);
