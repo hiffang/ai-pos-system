@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import ProductGrid from "./ProductGrid";
 import Cart from "./Cart";
+import CashPaymentDialog from "./CashPaymentDialog";
 import {
   fetchProducts,
   fetchCategories,
@@ -24,6 +25,8 @@ export default function POSTerminal() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("CASH");
+  const [isCashDialogOpen, setIsCashDialogOpen] = useState(false);
+  const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
 
   // Fetch products and categories on mount
   useEffect(() => {
@@ -139,7 +142,8 @@ export default function POSTerminal() {
     return name.includes(term) || sku.includes(term);
   });
 
-  const handleCheckout = async () => {
+  const handleCheckout = async (paymentDetails = {}) => {
+    setIsProcessingCheckout(true);
     try {
       // Create transaction
       const { order, stockUpdates } = await createTransaction({
@@ -152,11 +156,19 @@ export default function POSTerminal() {
         total,
       });
 
-      // Process payment
+      // Process payment. For cash, the dialog passes amountPaid + changeLKR;
+      // for other methods, default to the order total with no change.
+      const amountPaid = paymentDetails.amountPaid ?? total;
+      const changeLKR = paymentDetails.changeLKR;
       await processPayment({
         orderId: order.id,
         method: selectedPaymentMethod,
-        amount: total,
+        amount: amountPaid,
+        ...(changeLKR !== undefined &&
+          changeLKR !== null &&
+          changeLKR > 0 && {
+            metadata: { changeLKR },
+          }),
       });
 
       // Fire-and-log receipt print. Failures must never block checkout —
@@ -213,9 +225,21 @@ export default function POSTerminal() {
 
       // Clear cart after successful transaction
       clearCart();
+      setIsCashDialogOpen(false);
       alert("Transaction completed successfully!");
     } catch (error) {
       alert(`Checkout failed: ${error.message}`);
+    } finally {
+      setIsProcessingCheckout(false);
+    }
+  };
+
+  const initiateCheckout = () => {
+    if (cartItems.length === 0) return;
+    if (selectedPaymentMethod === "CASH") {
+      setIsCashDialogOpen(true);
+    } else {
+      handleCheckout();
     }
   };
 
@@ -276,11 +300,23 @@ export default function POSTerminal() {
           total={total}
           onUpdateQuantity={updateQuantity}
           onClear={clearCart}
-          onCheckout={handleCheckout}
+          onCheckout={initiateCheckout}
           selectedPaymentMethod={selectedPaymentMethod}
           onPaymentMethodChange={setSelectedPaymentMethod}
         />
       </main>
+
+      <CashPaymentDialog
+        isOpen={isCashDialogOpen}
+        total={total}
+        isProcessing={isProcessingCheckout}
+        onCancel={() => {
+          if (!isProcessingCheckout) setIsCashDialogOpen(false);
+        }}
+        onConfirm={(amountPaid, change) =>
+          handleCheckout({ amountPaid, changeLKR: change })
+        }
+      />
     </div>
   );
 }
