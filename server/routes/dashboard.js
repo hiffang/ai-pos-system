@@ -46,9 +46,19 @@ function endOfDay(date) {
 /**
  * @param {Date} date
  * @returns {string}
+ *
+ * Builds the date key from LOCAL components, not UTC. The trend loop creates
+ * date objects via setHours(0, 0, 0, 0) (local midnight) and the weekday
+ * labels are formatted in local time — using date.toISOString() here would
+ * silently shift those keys back to the previous UTC day for any timezone
+ * east of UTC (e.g. Sri Lanka UTC+5:30), making today's sales disappear
+ * from the chart and misaligning labels with their dates.
  */
 function toDateKey(date) {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 /**
@@ -57,6 +67,29 @@ function toDateKey(date) {
  */
 function toWeekdayLabel(date) {
   return new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date);
+}
+
+/**
+ * Return the local start-of-Sunday on or before the given date.
+ * @param {Date} date
+ * @returns {Date}
+ */
+function startOfWeek(date) {
+  const value = startOfDay(date);
+  value.setDate(value.getDate() - value.getDay());
+  return value;
+}
+
+/**
+ * Short "May 17" style label for a week-start date.
+ * @param {Date} date
+ * @returns {string}
+ */
+function toWeekLabel(date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
 }
 
 /**
@@ -177,6 +210,39 @@ router.get(
         });
       }
 
+      // Weekly trend — 4 buckets, each a Sun..Sat window in local time.
+      // Bucket key is the Sunday's date string; same UTC-vs-local discipline
+      // as the daily trend so order timestamps map to the correct shop week.
+      const thisWeekStart = startOfWeek(now);
+      const fourWeeksAgo = new Date(thisWeekStart);
+      fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 21);
+
+      const ordersLastFourWeeks = await prisma.order.findMany({
+        where: { createdAt: { gte: fourWeeksAgo, lte: todayEnd } },
+        select: { createdAt: true, totalLKR: true },
+      });
+
+      const salesByWeek = new Map();
+      for (const order of ordersLastFourWeeks) {
+        const weekKey = toDateKey(startOfWeek(order.createdAt));
+        salesByWeek.set(
+          weekKey,
+          (salesByWeek.get(weekKey) || 0) + toNumber(order.totalLKR),
+        );
+      }
+
+      const salesWeeklyTrend = [];
+      for (let i = 0; i < 4; i += 1) {
+        const weekStart = new Date(fourWeeksAgo);
+        weekStart.setDate(fourWeeksAgo.getDate() + i * 7);
+        const key = toDateKey(weekStart);
+        salesWeeklyTrend.push({
+          weekStart: key,
+          label: toWeekLabel(weekStart),
+          total: salesByWeek.get(key) || 0,
+        });
+      }
+
       const recentOrders = await prisma.order.findMany({
         orderBy: { createdAt: "desc" },
         take: 7,
@@ -273,6 +339,7 @@ router.get(
             lowStockItems: lowStockCount,
           },
           salesTrend,
+          salesWeeklyTrend,
           paymentMethods: paymentMethodBreakdown,
           recentTransactions,
           demandForecast,

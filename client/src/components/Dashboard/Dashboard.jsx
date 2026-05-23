@@ -123,7 +123,11 @@ export default function Dashboard() {
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <SalesChart data={overview?.salesTrend || []} isLoading={isLoading} />
+          <SalesChart
+            data={overview?.salesTrend || []}
+            weeklyData={overview?.salesWeeklyTrend || []}
+            isLoading={isLoading}
+          />
         </div>
         <PaymentMethodChart
           methods={overview?.paymentMethods || []}

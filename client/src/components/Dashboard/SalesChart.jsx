@@ -1,20 +1,54 @@
-export default function SalesChart({ data = [], isLoading = false }) {
-  const series = data.map((entry) => entry.total || 0);
-  const labels = data.map((entry) => entry.label || "");
+import { useState } from "react";
+
+const TITLES = {
+  daily: "Sales This Week",
+  weekly: "Sales — Last 4 Weeks",
+};
+
+const EMPTY_MESSAGES = {
+  daily: "No sales activity for the past week.",
+  weekly: "No sales activity for the past 4 weeks.",
+};
+
+export default function SalesChart({
+  data = [],
+  weeklyData = [],
+  isLoading = false,
+}) {
+  const [interval, setInterval] = useState("daily");
+
+  const activeData = interval === "weekly" ? weeklyData : data;
+  const series = activeData.map((entry) => entry.total || 0);
+  const labels = activeData.map((entry) => entry.label || "");
   const maxValue = Math.max(1, ...series);
   const hasData = series.some((value) => value > 0);
+
+  const tabClass = (key) =>
+    `text-xs px-2 py-1 rounded cursor-pointer transition-colors ${
+      interval === key
+        ? "bg-primary text-white"
+        : "bg-surface-container text-text-main hover:bg-surface-container-high"
+    }`;
 
   return (
     <div className="bg-surface p-6 rounded-xl shadow-sm">
       <div className="flex justify-between items-center mb-8">
-        <h3 className="font-h3 text-text-main">Sales This Week</h3>
+        <h3 className="font-h3 text-text-main">{TITLES[interval]}</h3>
         <div className="flex space-x-2">
-          <span className="text-xs bg-surface-container px-2 py-1 rounded">
+          <button
+            type="button"
+            className={tabClass("daily")}
+            onClick={() => setInterval("daily")}
+          >
             Daily
-          </span>
-          <span className="text-xs bg-primary text-white px-2 py-1 rounded">
+          </button>
+          <button
+            type="button"
+            className={tabClass("weekly")}
+            onClick={() => setInterval("weekly")}
+          >
             Weekly
-          </span>
+          </button>
         </div>
       </div>
       {isLoading ? (
@@ -44,7 +78,7 @@ export default function SalesChart({ data = [], isLoading = false }) {
         </>
       ) : (
         <div className="h-64 flex items-center justify-center text-sm text-text-muted">
-          No sales activity for the past week.
+          {EMPTY_MESSAGES[interval]}
         </div>
       )}
     </div>

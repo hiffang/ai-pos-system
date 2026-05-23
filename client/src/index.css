@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Tailwind v4 doesn't auto-load tailwind.config.js — opt in explicitly so that
+   theme colors (primary, danger, etc.) and the safelist defined there resolve
+   to real classes. Without this, e.g. `bg-primary` on the SalesChart bars
+   silently has no effect. */
+@config "../tailwind.config.js";
+
 @layer components {
   .material-symbols-outlined {
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
