@@ -8,6 +8,7 @@ const router = express.Router();
 /** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
 const { localWrite } = require("../services/syncEngine");
+const { requireRole } = require("../middleware/auth");
 
 /**
  * @param {string} message
@@ -85,6 +86,7 @@ router.get(
 // POST /api/categories - Create category
 router.post(
   "/",
+  requireRole("MANAGER"),
   async (
     /** @type {import("express").Request} */ req,
     /** @type {import("express").Response} */ res,
@@ -128,6 +130,7 @@ router.post(
 // PUT /api/categories/:id - Update category
 router.put(
   "/:id",
+  requireRole("MANAGER"),
   async (
     /** @type {import("express").Request} */ req,
     /** @type {import("express").Response} */ res,
@@ -163,6 +166,7 @@ router.put(
 // DELETE /api/categories/:id - Delete category
 router.delete(
   "/:id",
+  requireRole("MANAGER"),
   async (
     /** @type {import("express").Request} */ req,
     /** @type {import("express").Response} */ res,

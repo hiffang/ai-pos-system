@@ -19,8 +19,11 @@ const {
   getPrinterStatus,
 } = require("./services/hardware/printerRegistry");
 
+const { authenticate, requireRole } = require("./middleware/auth");
+
 // Import routes
 const aiRoutes = require("./routes/ai");
+const authRoutes = require("./routes/auth");
 const categoriesRoutes = require("./routes/categories");
 const dashboardRoutes = require("./routes/dashboard");
 const hardwareRoutes = require("./routes/hardware");
@@ -80,13 +83,30 @@ app.get(
 );
 
 // API Routes
-app.use("/api/ai", aiRoutes);
-app.use("/api/categories", categoriesRoutes);
-app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/hardware", hardwareRoutes);
-app.use("/api/payments", paymentsRoutes);
-app.use("/api/products", productsRoutes);
-app.use("/api/transactions", transactionsRoutes);
+//   /api/auth and /api/health are public.
+//   All other routes require a valid token (authenticate) and at least
+//   the role specified by requireRole(). Routes themselves can apply
+//   tighter per-handler guards if needed (e.g. user management endpoints).
+app.use("/api/auth", authRoutes);
+
+app.use("/api/products", authenticate, requireRole("CASHIER"), productsRoutes);
+app.use(
+  "/api/categories",
+  authenticate,
+  requireRole("CASHIER"),
+  categoriesRoutes,
+);
+app.use(
+  "/api/transactions",
+  authenticate,
+  requireRole("CASHIER"),
+  transactionsRoutes,
+);
+app.use("/api/payments", authenticate, requireRole("CASHIER"), paymentsRoutes);
+app.use("/api/hardware", authenticate, requireRole("CASHIER"), hardwareRoutes);
+
+app.use("/api/dashboard", authenticate, requireRole("MANAGER"), dashboardRoutes);
+app.use("/api/ai", authenticate, requireRole("MANAGER"), aiRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

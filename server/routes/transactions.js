@@ -62,49 +62,6 @@ function getParamString(value) {
   return value;
 }
 
-/**
- * Ensure the fallback SYSTEM user exists and return its id.
- * @returns {Promise<string>}
- */
-async function ensureSystemUser() {
-  const systemId = "SYSTEM";
-  const systemEmail = "system@local.test";
-
-  const existingById = await prisma.user.findUnique({
-    where: { id: systemId },
-    select: { id: true },
-  });
-
-  if (existingById) {
-    return existingById.id;
-  }
-
-  const existingByEmail = await prisma.user.findUnique({
-    where: { email: systemEmail },
-    select: { id: true },
-  });
-
-  if (existingByEmail) {
-    return existingByEmail.id;
-  }
-
-  const created = await localWrite({
-    operation: "INSERT",
-    entity: "User",
-    write: (tx) =>
-      tx.user.create({
-        data: {
-          id: systemId,
-          name: "System",
-          email: systemEmail,
-          passwordHash: "SYSTEM",
-          role: "CASHIER",
-        },
-      }),
-  });
-
-  return created.id;
-}
 
 // GET /api/transactions - List orders
 router.get(
@@ -191,32 +148,23 @@ router.get(
 router.post(
   "/",
   async (
-    /** @type {import("express").Request} */ req,
+    /** @type {import("express").Request & { user?: { id: string } }} */ req,
     /** @type {import("express").Response} */ res,
     /** @type {import("express").NextFunction} */ next,
   ) => {
     try {
-      let { userId, items, total, totalLKR } = req.body;
+      const { items, total, totalLKR } = req.body;
 
       if (!items || items.length === 0) {
         throw createHttpError("Order must have items", 400);
       }
 
+      // Cashier identity comes from the authenticated user — never trust a
+      // client-supplied userId. The authenticate middleware has already
+      // validated the JWT before this handler runs.
+      const userId = req.user?.id;
       if (!userId) {
-        throw createHttpError("User ID is required", 400);
-      }
-
-      if (userId === "SYSTEM") {
-        userId = await ensureSystemUser();
-      } else {
-        const existingUser = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { id: true },
-        });
-
-        if (!existingUser) {
-          throw createHttpError("User not found", 404);
-        }
+        throw createHttpError("Unauthorized", 401);
       }
 
       const totalValue = totalLKR ?? total;

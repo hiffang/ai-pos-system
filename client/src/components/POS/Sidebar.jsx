@@ -37,29 +37,6 @@ export default function Sidebar() {
           </button>
         ))}
       </nav>
-      <div className="mt-auto border-t border-gray-200 pt-4 space-y-1">
-        {bottomItems.map((item) => (
-          <button
-            key={item.path}
-            onClick={() => {
-              if (item.path === "/logout") {
-                console.log("Logout clicked");
-                // TODO: Implement logout logic
-              } else {
-                navigate(item.path);
-              }
-            }}
-            className={`w-full text-left mx-2 rounded-lg flex items-center gap-3 px-4 py-3 cursor-pointer transition-all ${
-              isActive(item.path)
-                ? "bg-white text-[#1D9E75] shadow-sm"
-                : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"
-            }`}
-          >
-            <span className="material-symbols-outlined">{item.icon}</span>
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </div>
     </aside>
   );
 }

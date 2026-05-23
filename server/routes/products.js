@@ -8,6 +8,7 @@ const router = express.Router();
 /** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
 const { localWrite } = require("../services/syncEngine");
+const { requireRole } = require("../middleware/auth");
 
 /**
  * @param {string} message
@@ -271,6 +272,7 @@ router.get(
 // POST /api/products - Create product
 router.post(
   "/",
+  requireRole("MANAGER"),
   async (
     /** @type {import("express").Request} */ req,
     /** @type {import("express").Response} */ res,
@@ -343,6 +345,7 @@ router.post(
 // PUT /api/products/:id - Update product
 router.put(
   "/:id",
+  requireRole("MANAGER"),
   async (
     /** @type {import("express").Request} */ req,
     /** @type {import("express").Response} */ res,
@@ -415,6 +418,7 @@ router.put(
 // DELETE /api/products/:id - Delete product
 router.delete(
   "/:id",
+  requireRole("MANAGER"),
   async (
     /** @type {import("express").Request} */ req,
     /** @type {import("express").Response} */ res,

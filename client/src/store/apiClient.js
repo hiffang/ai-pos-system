@@ -1,9 +1,99 @@
 /**
  * API Client Service
- * Handles all backend API calls with offline support
+ * Handles all backend API calls with offline support + JWT authentication.
  */
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+
+const AUTH_TOKEN_KEY = "ai-pos.authToken";
+
+/** @returns {string | null} */
+export function getAuthToken() {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** @param {string | null} token */
+export function setAuthToken(token) {
+  try {
+    if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
+    else localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch {
+    // ignore (private mode / storage disabled)
+  }
+}
+
+/**
+ * fetch() wrapper that attaches the Bearer token and triggers a hard redirect
+ * to /login on 401 (unless the caller passes options.skipAuthRedirect, e.g.
+ * the login endpoint itself, where a 401 means "bad password", not "session
+ * expired").
+ *
+ * @param {RequestInfo | URL} input
+ * @param {RequestInit & { skipAuthRedirect?: boolean }} [options]
+ */
+async function apiFetch(input, options = {}) {
+  const token = getAuthToken();
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(input, { ...options, headers });
+  if (response.status === 401 && !options.skipAuthRedirect) {
+    setAuthToken(null);
+    if (
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/login"
+    ) {
+      window.location.href = "/login";
+    }
+  }
+  return response;
+}
+
+/**
+ * Exchange email + password for a JWT. Stores the token on success.
+ * @param {string} email
+ * @param {string} password
+ * @returns {Promise<{ id: string, name: string, email: string, role: string }>}
+ */
+export async function login(email, password) {
+  const response = await apiFetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+    skipAuthRedirect: true,
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message || `Login failed (${response.status})`);
+  }
+  setAuthToken(body.data.token);
+  return body.data.user;
+}
+
+/**
+ * Fetch the currently authenticated user. Returns null if the token is
+ * missing or invalid (apiFetch will already have cleared the token + redirected).
+ */
+export async function fetchMe() {
+  if (!getAuthToken()) return null;
+  try {
+    const response = await apiFetch(`${API_BASE}/auth/me`);
+    if (!response.ok) return null;
+    const body = await response.json();
+    return body.data || null;
+  } catch (error) {
+    console.error("[API] Failed to fetch current user:", error);
+    return null;
+  }
+}
+
+/** Clear the stored token (the rest of logout — clearing UI state — is the store's job). */
+export function logout() {
+  setAuthToken(null);
+}
 
 function normalizePaymentMethod(method) {
   if (!method) return undefined;
@@ -75,7 +165,7 @@ function normalizeProduct(product) {
  */
 export async function fetchCategories() {
   try {
-    const response = await fetch(`${API_BASE}/categories`);
+    const response = await apiFetch(`${API_BASE}/categories`);
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
@@ -96,7 +186,7 @@ export async function fetchCategories() {
  */
 export async function createCategory(name) {
   try {
-    const response = await fetch(`${API_BASE}/categories`, {
+    const response = await apiFetch(`${API_BASE}/categories`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
@@ -123,7 +213,7 @@ export async function createCategory(name) {
  */
 export async function updateCategory(id, name) {
   try {
-    const response = await fetch(`${API_BASE}/categories/${id}`, {
+    const response = await apiFetch(`${API_BASE}/categories/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
@@ -149,7 +239,7 @@ export async function updateCategory(id, name) {
  */
 export async function deleteCategory(id) {
   try {
-    const response = await fetch(`${API_BASE}/categories/${id}`, {
+    const response = await apiFetch(`${API_BASE}/categories/${id}`, {
       method: "DELETE",
     });
 
@@ -179,7 +269,7 @@ export async function fetchProducts(options = {}) {
       ...(category && { category }),
     });
 
-    const response = await fetch(`${API_BASE}/products?${params}`);
+    const response = await apiFetch(`${API_BASE}/products?${params}`);
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
@@ -209,7 +299,7 @@ export async function fetchProductsPage(options = {}) {
       ...(category && { category }),
     });
 
-    const response = await fetch(`${API_BASE}/products?${params}`);
+    const response = await apiFetch(`${API_BASE}/products?${params}`);
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
@@ -239,7 +329,7 @@ export async function fetchProductsSummary(options = {}) {
       ...(category && { category }),
     });
 
-    const response = await fetch(
+    const response = await apiFetch(
       `${API_BASE}/products/summary${params.toString() ? `?${params}` : ""}`,
     );
 
@@ -262,7 +352,7 @@ export async function fetchProductsSummary(options = {}) {
  */
 export async function fetchProductById(id) {
   try {
-    const response = await fetch(`${API_BASE}/products/${id}`);
+    const response = await apiFetch(`${API_BASE}/products/${id}`);
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
@@ -284,7 +374,7 @@ export async function fetchProductById(id) {
  */
 export async function fetchProductByBarcode(code) {
   try {
-    const response = await fetch(
+    const response = await apiFetch(
       `${API_BASE}/products/by-barcode/${encodeURIComponent(code)}`,
     );
 
@@ -312,7 +402,7 @@ export async function fetchProductByBarcode(code) {
  */
 export async function updateProduct(id, payload) {
   try {
-    const response = await fetch(`${API_BASE}/products/${id}`, {
+    const response = await apiFetch(`${API_BASE}/products/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -338,7 +428,7 @@ export async function updateProduct(id, payload) {
  */
 export async function deleteProduct(id) {
   try {
-    const response = await fetch(`${API_BASE}/products/${id}`, {
+    const response = await apiFetch(`${API_BASE}/products/${id}`, {
       method: "DELETE",
     });
 
@@ -359,7 +449,7 @@ export async function deleteProduct(id) {
  */
 export async function createTransaction(transaction) {
   try {
-    const response = await fetch(`${API_BASE}/transactions`, {
+    const response = await apiFetch(`${API_BASE}/transactions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(transaction),
@@ -389,7 +479,7 @@ export async function createTransaction(transaction) {
  */
 export async function fetchTransactionById(id) {
   try {
-    const response = await fetch(
+    const response = await apiFetch(
       `${API_BASE}/transactions/${encodeURIComponent(id)}`,
     );
 
@@ -417,7 +507,7 @@ export async function fetchTransactionById(id) {
 export async function processPayment(payment) {
   try {
     const normalizedMethod = normalizePaymentMethod(payment?.method);
-    const response = await fetch(`${API_BASE}/payments`, {
+    const response = await apiFetch(`${API_BASE}/payments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -448,7 +538,7 @@ export async function processPayment(payment) {
  */
 export async function printReceipt(orderId) {
   try {
-    const response = await fetch(`${API_BASE}/hardware/print-receipt`, {
+    const response = await apiFetch(`${API_BASE}/hardware/print-receipt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ orderId }),
@@ -473,7 +563,7 @@ export async function printReceipt(orderId) {
  */
 export async function getServerHealth() {
   try {
-    const response = await fetch(`${API_BASE}/health`);
+    const response = await apiFetch(`${API_BASE}/health`);
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
@@ -493,7 +583,7 @@ export async function getServerHealth() {
  */
 export async function fetchProductForecast(productId) {
   try {
-    const response = await fetch(`${API_BASE}/ai/forecast/${productId}`);
+    const response = await apiFetch(`${API_BASE}/ai/forecast/${productId}`);
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
@@ -518,7 +608,7 @@ export async function fetchBatchForecasts(productIds) {
       return { data: [], missing: [] };
     }
 
-    const response = await fetch(`${API_BASE}/ai/forecast/batch`, {
+    const response = await apiFetch(`${API_BASE}/ai/forecast/batch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ productIds }),
@@ -545,7 +635,7 @@ export async function fetchBatchForecasts(productIds) {
  */
 export async function fetchDashboardOverview() {
   try {
-    const response = await fetch(`${API_BASE}/dashboard/overview`);
+    const response = await apiFetch(`${API_BASE}/dashboard/overview`);
 
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);

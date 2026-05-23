@@ -10,6 +10,7 @@ import {
   fetchProductByBarcode,
   printReceipt,
 } from "../../store/apiClient";
+import { useAuthStore } from "../../store/authStore";
 
 // USB HID barcode scanners type characters as a rapid burst terminated by Enter.
 // 50ms between keys is well above typical scanner speed (~5ms) and well below
@@ -18,6 +19,7 @@ const SCAN_KEY_GAP_MS = 50;
 const MIN_BARCODE_LENGTH = 8;
 
 export default function POSTerminal() {
+  const currentUser = useAuthStore((s) => s.user);
   const [cartItems, setCartItems] = useState([]);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -145,9 +147,11 @@ export default function POSTerminal() {
   const handleCheckout = async (paymentDetails = {}) => {
     setIsProcessingCheckout(true);
     try {
-      // Create transaction
+      // Create transaction. The server derives userId from the JWT — the
+      // userId field here is ignored on the wire but kept for backward
+      // compatibility with the schema until that endpoint is fully tightened.
       const { order, stockUpdates } = await createTransaction({
-        userId: "SYSTEM",
+        userId: currentUser?.id,
         items: cartItems.map((item) => ({
           productId: item.id,
           quantity: item.quantity,
@@ -176,9 +180,7 @@ export default function POSTerminal() {
       // from the Recent Transactions list if the printer is offline.
       printReceipt(order.id).then((result) => {
         if (!result) {
-          console.warn(
-            "[POS] Receipt print failed — payment already complete",
-          );
+          console.warn("[POS] Receipt print failed — payment already complete");
         }
       });
 
@@ -281,7 +283,7 @@ export default function POSTerminal() {
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.name.toLowerCase())}
-                className={`px-6 py-2 rounded-full font-label-caps whitespace-nowrap transition-colors ${
+                className={`px-6 py-2 rounded-full font-label-caps whitespace-nowrap hover:bg-[#1D9E75] hover:text-white transition-colors cursor-pointer ${
                   selectedCategory === cat.name.toLowerCase()
                     ? "bg-[#1D9E75] text-white"
                     : "bg-white border border-outline-variant text-on-surface hover:bg-surface-container"

@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import ConnectivityIndicator from "../ConnectivityIndicator";
+import { useAuthStore } from "../../store/authStore";
+
+const ROLE_LABELS = {
+  CASHIER: "Cashier",
+  MANAGER: "Manager",
+  ADMIN: "Admin",
+};
 
 const DATE_FORMAT = new Intl.DateTimeFormat("en-LK", {
   weekday: "short",
@@ -15,6 +23,14 @@ const TIME_FORMAT = new Intl.DateTimeFormat("en-LK", {
 
 export default function Header() {
   const [now, setNow] = useState(() => new Date());
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
 
   // Align the first update to the next minute boundary so the clock flips
   // at :00 sharp rather than at a random offset from mount, then tick once
@@ -43,7 +59,11 @@ export default function Header() {
           <span className="material-symbols-outlined text-primary">
             account_circle
           </span>
-          <span className="font-body-md text-on-surface">Kasun · Cashier</span>
+          <span className="font-body-md text-on-surface">
+            {user
+              ? `${user.name} · ${ROLE_LABELS[user.role] || user.role}`
+              : "Signed out"}
+          </span>
         </div>
       </div>
       <div className="flex items-center gap-6">
@@ -61,6 +81,15 @@ export default function Header() {
           <button className="material-symbols-outlined text-gray-600 hover:bg-gray-50 p-2 rounded-full transition-colors cursor-pointer active:opacity-80">
             sync
           </button>
+          {user ? (
+            <button
+              onClick={handleLogout}
+              title="Sign out"
+              className="material-symbols-outlined text-gray-600 hover:bg-red-50 hover:text-red-600 p-2 rounded-full transition-colors cursor-pointer active:opacity-80"
+            >
+              logout
+            </button>
+          ) : null}
         </div>
       </div>
     </header>

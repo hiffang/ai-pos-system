@@ -1,6 +1,29 @@
 const { PrismaClient } = require("@prisma/client");
+const bcrypt = require("bcryptjs");
 
 const prisma = new PrismaClient();
+
+// Default users for first-run. CHANGE THESE PASSWORDS in any real deployment.
+const defaultUsers = [
+  {
+    name: "Admin",
+    email: "admin@shop.lk",
+    password: "admin123",
+    role: "ADMIN",
+  },
+  {
+    name: "Manager",
+    email: "manager@shop.lk",
+    password: "manager123",
+    role: "MANAGER",
+  },
+  {
+    name: "Cashier",
+    email: "cashier@shop.lk",
+    password: "cashier123",
+    role: "CASHIER",
+  },
+];
 
 const categories = [
   "Dairy & Chilled",
@@ -136,6 +159,20 @@ const products = [
 ];
 
 async function main() {
+  for (const user of defaultUsers) {
+    const passwordHash = await bcrypt.hash(user.password, 10);
+    await prisma.user.upsert({
+      where: { email: user.email },
+      update: { name: user.name, role: user.role, passwordHash },
+      create: {
+        name: user.name,
+        email: user.email,
+        passwordHash,
+        role: user.role,
+      },
+    });
+  }
+
   const categoryMap = {};
 
   for (const name of categories) {
