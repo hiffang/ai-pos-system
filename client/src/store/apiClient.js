@@ -95,6 +95,99 @@ export function logout() {
   setAuthToken(null);
 }
 
+/**
+ * Change the currently authenticated user's password. Throws on failure.
+ * @param {string} currentPassword
+ * @param {string} newPassword
+ */
+export async function changePassword(currentPassword, newPassword) {
+  const response = await apiFetch(`${API_BASE}/auth/change-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword, newPassword }),
+    skipAuthRedirect: true,
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message || `Password change failed (${response.status})`);
+  }
+  return true;
+}
+
+// ---- User management (admin only) ---------------------------------------
+
+/** @returns {Promise<Array<object>>} */
+export async function fetchUsers() {
+  const response = await apiFetch(`${API_BASE}/users`);
+  if (!response.ok) {
+    return [];
+  }
+  const body = await response.json();
+  return body.data || [];
+}
+
+/**
+ * @param {{ name: string, email: string, role: string, password: string }} payload
+ */
+export async function createUser(payload) {
+  const response = await apiFetch(`${API_BASE}/users`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message || `Create user failed (${response.status})`);
+  }
+  return body.data;
+}
+
+/**
+ * @param {string} id
+ * @param {{ name?: string, email?: string, role?: string }} payload
+ */
+export async function updateUser(id, payload) {
+  const response = await apiFetch(`${API_BASE}/users/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message || `Update user failed (${response.status})`);
+  }
+  return body.data;
+}
+
+/**
+ * @param {string} id
+ * @param {string} newPassword
+ */
+export async function resetUserPassword(id, newPassword) {
+  const response = await apiFetch(`${API_BASE}/users/${id}/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ newPassword }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message || `Reset password failed (${response.status})`);
+  }
+  return true;
+}
+
+/** @param {string} id */
+export async function deleteUser(id) {
+  const response = await apiFetch(`${API_BASE}/users/${id}`, {
+    method: "DELETE",
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message || `Delete user failed (${response.status})`);
+  }
+  return true;
+}
+
 function normalizePaymentMethod(method) {
   if (!method) return undefined;
   const value = method.toString().trim().toUpperCase();

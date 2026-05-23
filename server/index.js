@@ -30,6 +30,7 @@ const hardwareRoutes = require("./routes/hardware");
 const paymentsRoutes = require("./routes/payments");
 const productsRoutes = require("./routes/products");
 const transactionsRoutes = require("./routes/transactions");
+const usersRoutes = require("./routes/users");
 
 // Initialize Express app
 const app = express();
@@ -107,6 +108,8 @@ app.use("/api/hardware", authenticate, requireRole("CASHIER"), hardwareRoutes);
 
 app.use("/api/dashboard", authenticate, requireRole("MANAGER"), dashboardRoutes);
 app.use("/api/ai", authenticate, requireRole("MANAGER"), aiRoutes);
+
+app.use("/api/users", authenticate, requireRole("ADMIN"), usersRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

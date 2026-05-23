@@ -6,19 +6,19 @@ const prisma = new PrismaClient();
 // Default users for first-run. CHANGE THESE PASSWORDS in any real deployment.
 const defaultUsers = [
   {
-    name: "Admin",
+    name: "Admin1",
     email: "admin@shop.lk",
     password: "admin123",
     role: "ADMIN",
   },
   {
-    name: "Manager",
+    name: "Manager1",
     email: "manager@shop.lk",
     password: "manager123",
     role: "MANAGER",
   },
   {
-    name: "Cashier",
+    name: "Cashier1",
     email: "cashier@shop.lk",
     password: "cashier123",
     role: "CASHIER",

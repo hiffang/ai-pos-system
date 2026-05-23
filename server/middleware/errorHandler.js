@@ -29,11 +29,13 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
-  // Unauthorized errors
+  // Unauthorized errors — preserve the route's specific message
+  // (e.g. "Invalid email or password", "Current password is incorrect")
+  // so the UI can surface it. Falls back to a generic message.
   if (err.statusCode === 401 || err.name === "UnauthorizedError") {
     return res.status(401).json({
       status: "error",
-      message: "Unauthorized",
+      message: err.message || "Unauthorized",
     });
   }
 

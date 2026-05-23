@@ -1,28 +1,26 @@
 import { useNavigate, useLocation } from "react-router-dom";
+import { useAuthStore } from "../../store/authStore";
 
 const navItems = [
-  { path: "/pos", icon: "point_of_sale", label: "POS Terminal" },
-  { path: "/dashboard", icon: "dashboard", label: "Dashboard" },
-  { path: "/inventory", icon: "inventory_2", label: "Inventory" },
-  { path: "/settings", icon: "settings", label: "Settings" },
-];
-
-const bottomItems = [
-  { path: "/help", icon: "help", label: "Help" },
-  { path: "/logout", icon: "logout", label: "Logout" },
+  { path: "/pos", icon: "point_of_sale", label: "POS Terminal", minRole: "CASHIER" },
+  { path: "/dashboard", icon: "dashboard", label: "Dashboard", minRole: "MANAGER" },
+  { path: "/inventory", icon: "inventory_2", label: "Inventory", minRole: "MANAGER" },
+  { path: "/settings", icon: "settings", label: "Settings", minRole: "CASHIER" },
 ];
 
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const hasRole = useAuthStore((s) => s.hasRole);
   const currentPath = location.pathname;
 
   const isActive = (path) => currentPath === path;
+  const visibleItems = navItems.filter((item) => hasRole(item.minRole));
 
   return (
     <aside className="fixed left-0 top-16 h-[calc(100vh-64px)] w-60 bg-gray-50 border-r border-gray-200 flex flex-col py-4 text-sm font-medium z-40">
       <nav className="flex-1 space-y-1">
-        {navItems.map((item) => (
+        {visibleItems.map((item) => (
           <button
             key={item.path}
             onClick={() => navigate(item.path)}

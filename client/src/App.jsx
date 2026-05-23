@@ -46,6 +46,7 @@ export default function App() {
             }
           />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/users" element={<Navigate to="/settings" replace />} />
           <Route path="/help" element={<Help />} />
           <Route path="/" element={<Navigate to="/pos" replace />} />
         </Route>

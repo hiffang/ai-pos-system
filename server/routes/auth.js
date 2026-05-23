@@ -89,6 +89,66 @@ router.post(
   },
 );
 
+// POST /api/auth/change-password — authenticated user changes their OWN password.
+// Admin password resets for *other* users live in /api/users/:id/reset-password.
+router.post(
+  "/change-password",
+  authenticate,
+  async (
+    /** @type {import("express").Request & { user?: any }} */ req,
+    /** @type {import("express").Response} */ res,
+    /** @type {import("express").NextFunction} */ next,
+  ) => {
+    try {
+      const { currentPassword, newPassword } = req.body || {};
+      if (!currentPassword || !newPassword) {
+        throw createHttpError(
+          "currentPassword and newPassword are required",
+          400,
+        );
+      }
+      if (typeof newPassword !== "string" || newPassword.length < 8) {
+        throw createHttpError(
+          "New password must be at least 8 characters",
+          400,
+        );
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { id: true, passwordHash: true },
+      });
+      if (!user) {
+        throw createHttpError("User not found", 404);
+      }
+      const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!ok) {
+        throw createHttpError("Current password is incorrect", 401);
+      }
+
+      const sameAsOld = await bcrypt.compare(newPassword, user.passwordHash);
+      if (sameAsOld) {
+        throw createHttpError(
+          "New password must differ from current password",
+          400,
+        );
+      }
+
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      });
+
+      // Existing JWT remains valid (same subject). Client may choose to log
+      // out other sessions; we don't enforce that here.
+      res.json({ status: "success", data: { ok: true } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 // GET /api/auth/me — echo the authenticated user (used by client to rehydrate)
 router.get(
   "/me",
