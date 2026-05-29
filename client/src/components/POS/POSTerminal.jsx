@@ -283,7 +283,7 @@ export default function POSTerminal() {
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.name.toLowerCase())}
-                className={`px-6 py-2 rounded-full font-label-caps whitespace-nowrap hover:bg-[#1D9E75] hover:text-white transition-colors cursor-pointer ${
+                className={`px-6 py-2 rounded-full font-label-caps whitespace-nowrap hover:bg-[#1D9E75] transition-colors cursor-pointer ${
                   selectedCategory === cat.name.toLowerCase()
                     ? "bg-[#1D9E75] text-white"
                     : "bg-white border border-outline-variant text-on-surface hover:bg-surface-container"
