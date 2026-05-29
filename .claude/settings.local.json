@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "PowerShell(npm install node-thermal-printer 2>&1)"
-    ]
-  }
-}
