@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import ProductGrid from "./ProductGrid";
 import Cart from "./Cart";
 import CashPaymentDialog from "./CashPaymentDialog";
+import AlertDialog from "./AlertDialog";
 import {
   fetchProducts,
   fetchCategories,
@@ -29,6 +30,16 @@ export default function POSTerminal() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("CASH");
   const [isCashDialogOpen, setIsCashDialogOpen] = useState(false);
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
+  const [alertDialog, setAlertDialog] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    tone: "info",
+  });
+
+  const showAlert = useCallback((title, message, tone = "info") => {
+    setAlertDialog({ isOpen: true, title, message, tone });
+  }, []);
 
   // Fetch products and categories on mount
   useEffect(() => {
@@ -64,11 +75,19 @@ export default function POSTerminal() {
     async (code) => {
       const product = await fetchProductByBarcode(code);
       if (!product) {
-        alert(`Unknown barcode: ${code}`);
+        showAlert(
+          "Unknown barcode",
+          `Barcode ${code} was not found.`,
+          "warning",
+        );
         return;
       }
       if (product.stock <= 0) {
-        alert(`${product.name} is out of stock`);
+        showAlert(
+          "Out of stock",
+          `${product.name} is out of stock.`,
+          "warning",
+        );
         return;
       }
       setSearchTerm("");
@@ -228,9 +247,16 @@ export default function POSTerminal() {
       // Clear cart after successful transaction
       clearCart();
       setIsCashDialogOpen(false);
-      alert("Transaction completed successfully!");
+      showAlert(
+        "Transaction complete",
+        "Transaction completed successfully.",
+        "success",
+      );
     } catch (error) {
-      alert(`Checkout failed: ${error.message}`);
+      const message = error?.message
+        ? `Checkout failed: ${error.message}`
+        : "Checkout failed. Please try again.";
+      showAlert("Checkout failed", message, "error");
     } finally {
       setIsProcessingCheckout(false);
     }
@@ -317,6 +343,15 @@ export default function POSTerminal() {
         }}
         onConfirm={(amountPaid, change) =>
           handleCheckout({ amountPaid, changeLKR: change })
+        }
+      />
+      <AlertDialog
+        isOpen={alertDialog.isOpen}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        tone={alertDialog.tone}
+        onClose={() =>
+          setAlertDialog((current) => ({ ...current, isOpen: false }))
         }
       />
     </div>
