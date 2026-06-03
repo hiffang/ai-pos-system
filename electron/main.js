@@ -13,6 +13,20 @@ const DEFAULT_PORT = 3000;
 const SERVER_TIMEOUT_MS = 10000;
 const MIGRATION_TIMEOUT_MS = 20000;
 
+function getRuntimeCwd() {
+  if (app.isPackaged) {
+    return path.dirname(app.getAppPath());
+  }
+  return app.getAppPath();
+}
+
+function getExecPath() {
+  const exePath = app.getPath("exe");
+  if (exePath && fs.existsSync(exePath)) return exePath;
+  if (process.execPath && fs.existsSync(process.execPath)) return process.execPath;
+  return process.execPath || exePath || "";
+}
+
 function loadRootEnv() {
   const envPath = path.join(app.getAppPath(), ".env");
   if (fs.existsSync(envPath)) {
@@ -75,6 +89,7 @@ async function runMigrations() {
   if (!app.isPackaged) return;
   const cliPath = getPrismaCliPath();
   const schemaPath = path.join(app.getAppPath(), "prisma", "schema.prisma");
+  const execPath = getExecPath();
 
   if (!fs.existsSync(cliPath)) {
     console.warn("[Electron] Prisma CLI not found; skipping migrations.");
@@ -86,13 +101,18 @@ async function runMigrations() {
     return;
   }
 
+  if (!execPath || !fs.existsSync(execPath)) {
+    console.warn("[Electron] Electron executable not found; skipping migrations.");
+    return;
+  }
+
   await new Promise((resolve, reject) => {
     const child = spawn(
-      process.execPath,
+      execPath,
       [cliPath, "migrate", "deploy", "--schema", schemaPath],
       {
-        env: { ...process.env },
-        cwd: app.getAppPath(),
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+        cwd: getRuntimeCwd(),
         stdio: "inherit",
       },
     );
@@ -101,6 +121,11 @@ async function runMigrations() {
       child.kill();
       reject(new Error("Prisma migrate deploy timed out"));
     }, MIGRATION_TIMEOUT_MS);
+
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
 
     child.on("exit", (code) => {
       clearTimeout(timeout);
@@ -136,10 +161,19 @@ async function startServerIfNeeded() {
   if (await isServerReady(port)) return port;
 
   const serverPath = path.join(app.getAppPath(), "server", "index.js");
-  serverProcess = spawn(process.execPath, [serverPath], {
+  const execPath = getExecPath();
+  if (!execPath || !fs.existsSync(execPath)) {
+    throw new Error("Electron executable not found; cannot start server");
+  }
+
+  serverProcess = spawn(execPath, [serverPath], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-    cwd: app.getAppPath(),
+    cwd: getRuntimeCwd(),
     stdio: "inherit",
+  });
+
+  serverProcess.on("error", (error) => {
+    console.error("[Electron] Failed to spawn server:", error);
   });
 
   serverProcess.on("exit", (code, signal) => {
@@ -160,11 +194,24 @@ function createWindow() {
     height: 800,
   });
 
-  const startUrl = app.isPackaged
-    ? `file://${path.join(__dirname, "../client/dist/index.html")}`
-    : "http://localhost:5173";
+  if (process.env.ELECTRON_DEBUG === "1") {
+    mainWindow.webContents.openDevTools({ mode: "detach" });
+  }
 
-  mainWindow.loadURL(startUrl);
+  mainWindow.webContents.on("did-fail-load", (_event, code, desc, url) => {
+    console.error("[Electron] Window failed to load", { code, desc, url });
+  });
+
+  mainWindow.webContents.on("console-message", (_event, level, message) => {
+    console.log(`[Renderer:${level}] ${message}`);
+  });
+
+  if (app.isPackaged) {
+    const indexPath = path.join(app.getAppPath(), "client", "dist", "index.html");
+    mainWindow.loadFile(indexPath);
+  } else {
+    mainWindow.loadURL("http://localhost:5173");
+  }
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -173,7 +220,11 @@ function createWindow() {
 app.whenReady().then(async () => {
   try {
     configureRuntimeEnv();
-    await runMigrations();
+    try {
+      await runMigrations();
+    } catch (error) {
+      console.warn("[Electron] Migration skipped:", error);
+    }
     await startServerIfNeeded();
     createWindow();
   } catch (error) {

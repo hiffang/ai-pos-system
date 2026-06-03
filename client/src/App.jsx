@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import MainLayout from "./MainLayout";
 import POSTerminal from "./components/POS/POSTerminal";
 import Dashboard from "./components/Dashboard/Dashboard";
@@ -12,13 +12,17 @@ import { useAuthStore } from "./store/authStore";
 
 export default function App() {
   const initialize = useAuthStore((s) => s.initialize);
+  const Router =
+    typeof window !== "undefined" && window.location.protocol === "file:"
+      ? HashRouter
+      : BrowserRouter;
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
@@ -51,6 +55,6 @@ export default function App() {
           <Route path="/" element={<Navigate to="/pos" replace />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </Router>
   );
 }

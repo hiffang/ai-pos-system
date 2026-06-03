@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   root: "client",
+  base: "./",
   plugins: [react()],
   server: {
     port: 5173,
