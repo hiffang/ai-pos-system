@@ -82,7 +82,11 @@ export default function Dashboard() {
       </div>
 
       {/* AI Insights Alert */}
-      <AIInsightStrip message={overview?.aiInsight} isLoading={isLoading} />
+      <AIInsightStrip
+        message={overview?.aiInsight}
+        isLoading={isLoading}
+        meta={overview?.aiInsightMeta ?? null}
+      />
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

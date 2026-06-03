@@ -16,6 +16,26 @@
     "db:seed": "node prisma/seed.js",
     "db:studio": "prisma studio"
   },
+  "build": {
+    "appId": "com.ai.pos.system",
+    "productName": "AI POS System",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "server/**/*",
+      "client/dist/**/*",
+      "prisma/**/*",
+      "ai/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/.prisma/**",
+      "node_modules/@prisma/engines/**",
+      "node_modules/onnxruntime-node/**"
+    ]
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",

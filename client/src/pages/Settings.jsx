@@ -1,6 +1,7 @@
 import { useState } from "react";
 import AccountSection from "../components/Settings/AccountSection";
 import UsersSection from "../components/Settings/UsersSection";
+import DiagnosticsSection from "../components/Settings/DiagnosticsSection";
 import { useAuthStore } from "../store/authStore";
 
 export default function Settings() {
@@ -15,6 +16,13 @@ export default function Settings() {
       icon: "person",
       render: () => <AccountSection />,
       minRole: "CASHIER",
+    },
+    {
+      key: "diagnostics",
+      label: "Diagnostics",
+      icon: "monitoring",
+      render: () => <DiagnosticsSection />,
+      minRole: "MANAGER",
     },
     {
       key: "users",

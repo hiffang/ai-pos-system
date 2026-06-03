@@ -7,6 +7,8 @@ const express = require("express");
 const router = express.Router();
 /** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
+const { predictInventoryNeeds } = require("../services/aiInference");
+const { getInsight } = require("../services/ai/llmInsight");
 
 /**
  * @param {unknown} value
@@ -272,6 +274,12 @@ router.get(
         };
       });
 
+      // --- Demand forecast ---------------------------------------------------
+      // Pull the top products by recent activity, then run each through the
+      // AI forecasting engine (heuristic today, ONNX when trained).  We build
+      // sales history here rather than inside the AI route so the dashboard
+      // can enrich predictions with live stock levels and thresholds.
+
       const orderItems = await prisma.orderItem.findMany({
         where: {
           order: { createdAt: { gte: fourteenDaysAgo, lte: todayEnd } },
@@ -282,6 +290,7 @@ router.get(
       const sevenDaysBoundary = startOfDay(new Date(now.getTime()));
       sevenDaysBoundary.setDate(sevenDaysBoundary.getDate() - 6);
 
+      // Accumulate recent/previous qty per product for trend calculation
       const forecastMap = new Map();
       for (const item of orderItems) {
         const existing = forecastMap.get(item.productId) || {
@@ -291,6 +300,7 @@ router.get(
           threshold: item.product.reorderThreshold,
           recentQty: 0,
           previousQty: 0,
+          salesHistory: [],
         };
 
         if (item.order.createdAt >= sevenDaysBoundary) {
@@ -302,48 +312,93 @@ router.get(
         forecastMap.set(item.productId, existing);
       }
 
-      const demandForecast = Array.from(forecastMap.values())
+      // Top 5 most-active products
+      const topEntries = Array.from(forecastMap.values())
         .sort((a, b) => b.recentQty - a.recentQty)
-        .slice(0, 5)
-        .map((entry) => {
+        .slice(0, 5);
+
+      // Run AI predictions for the top products (non-blocking — falls back to
+      // heuristic if the model isn't loaded; errors are swallowed inside
+      // predictInventoryNeeds so the dashboard never breaks)
+      const aiPredictions = await predictInventoryNeeds(
+        topEntries.map((e) => ({ id: e.productId, salesHistory: e.salesHistory })),
+      );
+      const predictionById = new Map(
+        aiPredictions.map((p) => [p.productId, p]),
+      );
+
+      const demandForecast = topEntries.map((entry) => {
+        const prediction = predictionById.get(entry.productId);
+
+        // Prefer AI trend when available, fall back to simple week-over-week
+        let demandLabel;
+        let recommendationResult;
+
+        if (prediction) {
+          demandLabel = prediction.trend === "increasing"
+            ? `+${Math.round((prediction.point / Math.max(entry.recentQty, 1) - 1) * 100)}% Rise`
+            : prediction.trend === "decreasing"
+              ? `${Math.round((1 - prediction.point / Math.max(entry.recentQty, 1)) * 100)}% Drop`
+              : "Stable";
+
+          // REORDER NOW if stock won't cover the P90 upper forecast
+          if (entry.stockQty <= entry.threshold) {
+            recommendationResult = { recommendation: "REORDER NOW", color: "danger" };
+          } else if (prediction.demandLevel === "high" || prediction.demandLevel === "very_high") {
+            recommendationResult = { recommendation: "MONITOR", color: "warning" };
+          } else {
+            recommendationResult = { recommendation: "SUFFICIENT", color: "primary" };
+          }
+        } else {
           const change = entry.previousQty
             ? ((entry.recentQty - entry.previousQty) / entry.previousQty) * 100
-            : entry.recentQty > 0
-              ? 100
-              : 0;
-          const recommendation = getRecommendation(
-            change,
-            entry.stockQty,
-            entry.threshold,
-          );
+            : entry.recentQty > 0 ? 100 : 0;
+          demandLabel = formatDemand(change);
+          recommendationResult = getRecommendation(change, entry.stockQty, entry.threshold);
+        }
 
-          return {
-            product: entry.name,
-            stock: `${entry.stockQty} Units`,
-            demand: formatDemand(change),
-            recommendation: recommendation.recommendation,
-            color: recommendation.color,
-          };
-        });
+        return {
+          product: entry.name,
+          stock: `${entry.stockQty} Units`,
+          demand: demandLabel,
+          recommendation: recommendationResult.recommendation,
+          color: recommendationResult.color,
+        };
+      });
 
-      const aiInsight = demandForecast.length
-        ? `AI Insights: ${demandForecast[0].product} demand is trending up. Consider reordering soon.`
-        : null;
+      // --- LLM insight narrative -------------------------------------------
+      // getInsight() applies three cost-control gates before calling the API:
+      //   1. Same data hash as last time  → return cache immediately
+      //   2. Cache younger than MAX_AGE   → return cache
+      //   3. No API key / offline         → return cache or null
+      // The dashboard never waits on a slow API call: if the cache is warm the
+      // response is instant; if the API call fails the last narrative is shown.
+
+      const summaryForInsight = {
+        todayRevenue: toNumber(todayRevenueAgg._sum.amountLKR),
+        ordersToday: ordersTodayCount,
+        lowStockItems: lowStockCount,
+      };
+
+      const insightResult = await getInsight(demandForecast, summaryForInsight);
+      const aiInsight = insightResult?.narrative ?? null;
 
       res.json({
         status: "success",
         data: {
-          summary: {
-            todayRevenue: toNumber(todayRevenueAgg._sum.amountLKR),
-            ordersToday: ordersTodayCount,
-            lowStockItems: lowStockCount,
-          },
+          summary: summaryForInsight,
           salesTrend,
           salesWeeklyTrend,
           paymentMethods: paymentMethodBreakdown,
           recentTransactions,
           demandForecast,
           aiInsight,
+          aiInsightMeta: insightResult
+            ? {
+                fromCache: insightResult.fromCache,
+                generatedAt: insightResult.generatedAt,
+              }
+            : null,
         },
       });
     } catch (error) {

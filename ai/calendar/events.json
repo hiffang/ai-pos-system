@@ -1,5 +1,5 @@
 {
-  "$schema": "Sri Lankan calendar events used by ai/calendar/sriLankaCalendar.{js,py}",
+  "$comment": "Sri Lankan calendar events used by ai/calendar/sriLankaCalendar.{js,py}",
   "$note": "Poya, Eid, and Deepavali dates are lunar and MUST be verified against the official Sri Lankan government gazette (gov.lk) before training each year. The values seeded below are placeholders.",
 
   "fixedPublicHolidays": [

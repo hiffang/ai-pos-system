@@ -60,6 +60,36 @@ function validateEnvironment() {
   console.log("[Server] Environment validation passed");
 }
 
+function describeDatabaseUrl(rawUrl) {
+  if (!rawUrl) return { provider: "unknown" };
+  if (rawUrl.startsWith("file:")) {
+    let location = rawUrl.replace(/^file:/, "");
+    if (location.startsWith("//")) {
+      try {
+        const parsed = new URL(rawUrl);
+        location = decodeURIComponent(parsed.pathname || "");
+        if (process.platform === "win32" && location.startsWith("/")) {
+          location = location.slice(1);
+        }
+      } catch {
+        // fallback to raw file string
+      }
+    }
+    return { provider: "sqlite", location };
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    return {
+      provider: parsed.protocol.replace(":", ""),
+      host: parsed.hostname,
+      database: parsed.pathname.replace(/^\/+/, "") || undefined,
+    };
+  } catch {
+    return { provider: "unknown" };
+  }
+}
+
 // Health checks
 app.get(
   "/api/health",
@@ -73,6 +103,7 @@ app.get(
         status: "ok",
         timestamp: new Date(),
         environment: process.env.NODE_ENV,
+        database: describeDatabaseUrl(process.env.DATABASE_URL),
         aiModelStatus: getModelStatus(),
         syncStatus: getSyncStatus(),
         printerStatus: getPrinterStatus(),

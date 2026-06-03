@@ -1,9 +1,12 @@
 /**
  * Sync Daemon Service
- * Watches for pending outbox entries and syncs to Supabase when online
- * Handles conflict resolution and retry logic
+ * Watches for pending outbox entries and syncs to Supabase when online.
+ * Handles conflict resolution and retry logic.
+ *
+ * Connectivity detection uses a lightweight HTTP probe against a reliable
+ * endpoint rather than the browser `window` object, which is not available
+ * in the Node.js / Electron main process where this daemon runs.
  */
-/** @type {import("@prisma/client").PrismaClient} */
 /** @type {import("@prisma/client").PrismaClient} */
 const prisma = require("../db");
 const supabase =
@@ -13,19 +16,67 @@ const supabase =
 
 /** @type {NodeJS.Timeout | null} */
 let syncInterval = null;
-let isOnline = true;
+/** @type {NodeJS.Timeout | null} */
+let connectivityInterval = null;
+let isOnline = false; // start pessimistic; first probe sets the real state
 
-/** @type {{ addEventListener: (type: string, listener: () => void) => void } | undefined} */
-const browserWindow =
-  typeof globalThis !== "undefined" &&
-  "window" in globalThis &&
-  /** @type {any} */ (globalThis).window
-    ? /** @type {any} */ (globalThis).window
-    : undefined;
+// ---------------------------------------------------------------------------
+// Connectivity probe
+// ---------------------------------------------------------------------------
 
 /**
- * Start the sync daemon
- * Runs every 30 seconds when online, checks for pending outbox entries
+ * Probe a lightweight, reliable URL to check real internet reachability.
+ * Uses the Supabase URL when configured (same host we sync to), otherwise
+ * falls back to the Anthropic API host — both are already allowed in the
+ * network policy and give a fast non-caching HEAD response.
+ *
+ * @returns {Promise<boolean>}
+ */
+async function probeConnectivity() {
+  const probeUrl =
+    process.env.SUPABASE_URL
+      ? `${process.env.SUPABASE_URL}/health`
+      : "https://api.anthropic.com";
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(probeUrl, {
+      method: "HEAD",
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    return res.ok || res.status < 500; // 4xx still means we're online
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Update `isOnline` from a fresh probe and log transitions.
+ */
+async function refreshConnectivityState() {
+  const wasOnline = isOnline;
+  isOnline = await probeConnectivity();
+
+  if (!wasOnline && isOnline) {
+    console.log("[Sync] Online — triggering immediate sync");
+    syncPendingOutbox().catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[Sync] Post-reconnect sync error:", message);
+    });
+  } else if (wasOnline && !isOnline) {
+    console.log("[Sync] Offline — outbox sync paused");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Daemon lifecycle
+// ---------------------------------------------------------------------------
+
+/**
+ * Start the sync daemon.
+ * Runs a connectivity probe every 20 s and an outbox flush every 30 s.
  */
 function startSyncDaemon() {
   if (syncInterval) {
@@ -35,21 +86,11 @@ function startSyncDaemon() {
 
   console.log("[Sync] Starting sync daemon");
 
-  // Check connectivity
-  if (browserWindow) {
-    browserWindow.addEventListener("online", () => {
-      isOnline = true;
-      console.log("[Sync] Online detected, starting sync");
-      syncPendingOutbox();
-    });
+  // Connectivity poller — every 20 s
+  refreshConnectivityState(); // immediate first probe
+  connectivityInterval = setInterval(refreshConnectivityState, 20_000);
 
-    browserWindow.addEventListener("offline", () => {
-      isOnline = false;
-      console.log("[Sync] Offline detected, pausing sync");
-    });
-  }
-
-  // Sync every 30 seconds if online
+  // Outbox flush — every 30 s, only when online
   syncInterval = setInterval(() => {
     if (isOnline) {
       syncPendingOutbox().catch((err) => {
@@ -57,24 +98,22 @@ function startSyncDaemon() {
         console.error("[Sync] Daemon error:", message);
       });
     }
-  }, 30000);
-
-  // Initial sync attempt
-  syncPendingOutbox().catch((err) => {
-    const message = err instanceof Error ? err.message : String(err);
-    console.warn("[Sync] Initial sync failed (non-blocking):", message);
-  });
+  }, 30_000);
 }
 
 /**
- * Stop the sync daemon
+ * Stop the sync daemon and connectivity poller.
  */
 function stopSyncDaemon() {
   if (syncInterval) {
     clearInterval(syncInterval);
     syncInterval = null;
-    console.log("[Sync] Daemon stopped");
   }
+  if (connectivityInterval) {
+    clearInterval(connectivityInterval);
+    connectivityInterval = null;
+  }
+  console.log("[Sync] Daemon stopped");
 }
 
 /**

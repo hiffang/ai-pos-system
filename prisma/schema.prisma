@@ -114,3 +114,16 @@ model AuditLog {
   metadata  String?
   createdAt DateTime @default(now())
 }
+
+// LLM-generated narrative insight cached locally.
+// inputHash detects when the underlying forecast data has changed so we only
+// call the API when the numbers are actually different, not just because time
+// has passed.  One non-stale row is the "active" insight shown in the UI.
+model AIInsight {
+  id          String   @id @default(uuid())
+  narrative   String
+  modelUsed   String   @default("claude-sonnet-4-6")
+  inputHash   String
+  generatedAt DateTime @default(now())
+  stale       Boolean  @default(false)
+}
