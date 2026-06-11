@@ -23,7 +23,7 @@ router.post(
 
       if (!orderId || !method || !amount) {
         const error = new Error("Order ID, method, and amount are required");
-        error.statusCode = 400;
+        /** @type {any} */ (error).statusCode = 400;
         throw error;
       }
 
@@ -51,7 +51,7 @@ router.post(
 
       if (!paymentId || !signature) {
         const error = new Error("Payment ID and signature are required");
-        error.statusCode = 400;
+        /** @type {any} */ (error).statusCode = 400;
         throw error;
       }
 

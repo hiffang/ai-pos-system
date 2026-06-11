@@ -1,4 +1,27 @@
 const { app, BrowserWindow } = require("electron");
+// Wrap console methods to avoid crashing on EPIPE when stdout/stderr are closed
+{
+  const methods = ["log", "info", "warn", "error", "debug"];
+  for (const m of methods) {
+    const orig = console[m].bind(console);
+    console[m] = (...args) => {
+      try {
+        return orig(...args);
+      } catch (err) {
+        // Ignore EPIPE (broken pipe) which can happen in some Windows installer
+        // contexts where stdout/stderr are closed by the parent process.
+        if (err && err.code === "EPIPE") return;
+        try {
+          // fallback to writing to a file under userData
+          const fallbackPath = path.join(app.getPath("userData") || ".", "electron.log");
+          fs.appendFileSync(fallbackPath, `[${m.toUpperCase()}] ` + args.map(String).join(" ") + "\n");
+        } catch (e) {
+          // swallow any further errors
+        }
+      }
+    };
+  }
+}
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
