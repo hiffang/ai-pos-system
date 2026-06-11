@@ -1,71 +1,130 @@
+/**
+ * Electron main process — zero third-party dependencies.
+ *
+ * Architecture: asar:false means all files are extracted normally into
+ * resources/app/. node_modules sits next to server/ and electron/ just
+ * like a regular Node project, so require() resolution works without
+ * any special tricks.
+ *
+ * Boot sequence:
+ *   1. configureRuntimeEnv()  — parse .env, set DATABASE_URL + JWT_SECRET
+ *   2. showSplash()           — visible immediately while server starts
+ *   3. runMigrations()        — deploy pending schema migrations
+ *   4. startServer()          — spawn Express as child process
+ *   5. waitForServer()        — poll /api/health
+ *   6. createMainWindow()     — load React SPA, close splash
+ */
+
 const { app, BrowserWindow } = require("electron");
-// Wrap console methods to avoid crashing on EPIPE when stdout/stderr are closed
+const path    = require("path");
+const fs      = require("fs");
+const crypto  = require("crypto");
+const { spawn }         = require("child_process");
+const { pathToFileURL } = require("url");
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const DEFAULT_PORT         = 3000;
+const SERVER_TIMEOUT_MS    = 30_000;
+const MIGRATION_TIMEOUT_MS = 40_000;
+const POLL_INTERVAL_MS     = 300;
+
+// ─── State ───────────────────────────────────────────────────────────────────
+
+let mainWindow    = null;
+let splashWindow  = null;
+let serverProcess = null;
+
+// ─── File logger ─────────────────────────────────────────────────────────────
+// stdout/stderr are closed in packaged Windows apps — always write to a file.
+
+let _logPath = null;
+
+function getLogPath() {
+  if (_logPath) return _logPath;
+  try {
+    const dir = app.getPath("userData");
+    fs.mkdirSync(dir, { recursive: true });
+    _logPath = path.join(dir, "electron.log");
+  } catch {
+    _logPath = path.join(".", "electron.log");
+  }
+  return _logPath;
+}
+
+function writeLog(level, ...args) {
+  const line = `[${new Date().toISOString()}] [${level}] ${args.map(String).join(" ")}\n`;
+  try { fs.appendFileSync(getLogPath(), line); } catch { /* swallow */ }
+}
+
 {
   const methods = ["log", "info", "warn", "error", "debug"];
   for (const m of methods) {
     const orig = console[m].bind(console);
     console[m] = (...args) => {
-      try {
-        return orig(...args);
-      } catch (err) {
-        // Ignore EPIPE (broken pipe) which can happen in some Windows installer
-        // contexts where stdout/stderr are closed by the parent process.
-        if (err && err.code === "EPIPE") return;
-        try {
-          // fallback to writing to a file under userData
-          const fallbackPath = path.join(app.getPath("userData") || ".", "electron.log");
-          fs.appendFileSync(fallbackPath, `[${m.toUpperCase()}] ` + args.map(String).join(" ") + "\n");
-        } catch (e) {
-          // swallow any further errors
-        }
+      writeLog(m.toUpperCase(), ...args);
+      try { orig(...args); } catch (e) {
+        if (e && e.code !== "EPIPE") writeLog("ERROR", "console write failed:", e.message);
       }
     };
   }
 }
-const path = require("path");
-const fs = require("fs");
-const crypto = require("crypto");
-const { spawn } = require("child_process");
-const dotenv = require("dotenv");
-const { pathToFileURL } = require("url");
 
-let mainWindow;
-let serverProcess;
+// ─── Path helpers ─────────────────────────────────────────────────────────────
+//
+// asar:false layout on disk:
+//   resources/
+//     app/                   ← app.getAppPath()
+//       electron/main.js
+//       server/index.js
+//       node_modules/        ← right here, next to server/
+//       prisma/
+//       client/dist/
+//       package.json
 
-const DEFAULT_PORT = 3000;
-const SERVER_TIMEOUT_MS = 10000;
-const MIGRATION_TIMEOUT_MS = 20000;
-
-function getRuntimeCwd() {
-  if (app.isPackaged) {
-    return path.dirname(app.getAppPath());
-  }
-  return app.getAppPath();
+function appRoot() {
+  return app.getAppPath();   // .../resources/app  (real directory, not asar)
 }
 
-function getExecPath() {
-  const exePath = app.getPath("exe");
-  if (exePath && fs.existsSync(exePath)) return exePath;
-  if (process.execPath && fs.existsSync(process.execPath)) return process.execPath;
-  return process.execPath || exePath || "";
+function spawnCwd() {
+  return appRoot();          // node_modules is at appRoot/node_modules
 }
+
+// ─── Pure-Node .env parser ────────────────────────────────────────────────────
 
 function loadRootEnv() {
-  const envPath = path.join(app.getAppPath(), ".env");
-  if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath });
+  const envPath = path.join(appRoot(), ".env");
+  if (!fs.existsSync(envPath)) return;
+  try {
+    for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) continue;
+      const eq = t.indexOf("=");
+      if (eq === -1) continue;
+      const key = t.slice(0, eq).trim();
+      let val = t.slice(eq + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) ||
+          (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
+      }
+      if (key && !(key in process.env)) process.env[key] = val;
+    }
+  } catch (err) {
+    console.warn("[Electron] .env parse error:", err.message);
   }
 }
+
+// ─── Environment setup ────────────────────────────────────────────────────────
 
 function ensureJwtSecret(userDataPath) {
   if (process.env.JWT_SECRET) return;
-  const secretPath = path.join(userDataPath, "jwt-secret.txt");
-  if (fs.existsSync(secretPath)) {
-    process.env.JWT_SECRET = fs.readFileSync(secretPath, "utf8").trim();
+  const p = path.join(userDataPath, "jwt-secret.txt");
+  if (fs.existsSync(p)) {
+    process.env.JWT_SECRET = fs.readFileSync(p, "utf8").trim();
     return;
   }
   const secret = crypto.randomBytes(32).toString("hex");
-  fs.writeFileSync(secretPath, secret, "utf8");
+  fs.writeFileSync(p, secret, "utf8");
   process.env.JWT_SECRET = secret;
 }
 
@@ -75,201 +134,253 @@ function ensureDatabase(userDataPath) {
   const dbPath = path.join(dataDir, "pos.db");
 
   if (!fs.existsSync(dbPath)) {
-    const bundledDb = path.join(app.getAppPath(), "prisma", "pos.db");
-    if (fs.existsSync(bundledDb)) {
-      fs.copyFileSync(bundledDb, dbPath);
+    const bundled = path.join(appRoot(), "prisma", "pos.db");
+    if (fs.existsSync(bundled)) {
+      fs.copyFileSync(bundled, dbPath);
+      console.log("[Electron] Copied seed database to", dbPath);
+    } else {
+      console.warn("[Electron] No bundled pos.db — Prisma will create a blank database");
     }
   }
 
-  const url = pathToFileURL(dbPath).href;
-  if (!process.env.DATABASE_URL || app.isPackaged) {
-    process.env.DATABASE_URL = url;
+  // Always use the writable userData copy in production
+  if (app.isPackaged || !process.env.DATABASE_URL) {
+    process.env.DATABASE_URL = pathToFileURL(dbPath).href;
+    console.log("[Electron] DATABASE_URL =", process.env.DATABASE_URL);
   }
 }
 
 function configureRuntimeEnv() {
   loadRootEnv();
+  process.env.NODE_ENV = process.env.NODE_ENV || (app.isPackaged ? "production" : "development");
+  process.env.PORT     = process.env.PORT || String(DEFAULT_PORT);
+  process.env.APP_URL  = `http://localhost:${process.env.PORT}`;
 
-  if (!process.env.NODE_ENV) {
-    process.env.NODE_ENV = app.isPackaged ? "production" : "development";
-  }
-  if (!process.env.PORT) {
-    process.env.PORT = String(DEFAULT_PORT);
-  }
-  process.env.APP_URL = `http://localhost:${process.env.PORT}`;
+  const userData = app.getPath("userData");
+  fs.mkdirSync(userData, { recursive: true });
+  ensureJwtSecret(userData);
+  ensureDatabase(userData);
 
-  const userDataPath = app.getPath("userData");
-  fs.mkdirSync(userDataPath, { recursive: true });
-  ensureJwtSecret(userDataPath);
-  ensureDatabase(userDataPath);
+  console.log("[Electron] appRoot  =", appRoot());
+  console.log("[Electron] NODE_ENV =", process.env.NODE_ENV);
+  console.log("[Electron] PORT     =", process.env.PORT);
 }
 
-function getPrismaCliPath() {
-  return path.join(app.getAppPath(), "node_modules", "prisma", "build", "index.js");
+// ─── Splash window ────────────────────────────────────────────────────────────
+
+function showSplash() {
+  splashWindow = new BrowserWindow({
+    width: 420, height: 280,
+    frame: false, resizable: false, center: true,
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
+  });
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,'Segoe UI',sans-serif;background:#1a1a2e;color:#e0e0e0;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    height:100vh;gap:20px;user-select:none}
+  h1{font-size:22px;font-weight:600;color:#fff}
+  p{font-size:13px;color:#888}
+  .bar-wrap{width:260px;height:4px;background:#2a2a4a;border-radius:2px;overflow:hidden}
+  .bar{height:100%;width:30%;background:#6c63ff;border-radius:2px;
+    animation:slide 1.4s ease-in-out infinite}
+  @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(433%)}}
+</style></head><body>
+  <h1>AI POS System</h1>
+  <div class="bar-wrap"><div class="bar"></div></div>
+  <p>Starting up, please wait…</p>
+</body></html>`;
+
+  splashWindow.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
+  splashWindow.on("closed", () => { splashWindow = null; });
 }
+
+function closeSplash() {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.close();
+    splashWindow = null;
+  }
+}
+
+// ─── Migrations ───────────────────────────────────────────────────────────────
 
 async function runMigrations() {
   if (!app.isPackaged) return;
-  const cliPath = getPrismaCliPath();
-  const schemaPath = path.join(app.getAppPath(), "prisma", "schema.prisma");
-  const execPath = getExecPath();
+
+  const cliPath    = path.join(appRoot(), "node_modules", "prisma", "build", "index.js");
+  const schemaPath = path.join(appRoot(), "prisma", "schema.prisma");
 
   if (!fs.existsSync(cliPath)) {
-    console.warn("[Electron] Prisma CLI not found; skipping migrations.");
+    console.warn("[Electron] Prisma CLI not found at", cliPath, "— skipping migrations");
     return;
   }
-
   if (!fs.existsSync(schemaPath)) {
-    console.warn("[Electron] Prisma schema missing; skipping migrations.");
+    console.warn("[Electron] schema.prisma not found — skipping migrations");
     return;
   }
 
-  if (!execPath || !fs.existsSync(execPath)) {
-    console.warn("[Electron] Electron executable not found; skipping migrations.");
-    return;
-  }
+  console.log("[Electron] Running prisma migrate deploy…");
 
   await new Promise((resolve, reject) => {
     const child = spawn(
-      execPath,
+      process.execPath,
       [cliPath, "migrate", "deploy", "--schema", schemaPath],
       {
         env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-        cwd: getRuntimeCwd(),
-        stdio: "inherit",
-      },
-    );
-
-    const timeout = setTimeout(() => {
-      child.kill();
-      reject(new Error("Prisma migrate deploy timed out"));
-    }, MIGRATION_TIMEOUT_MS);
-
-    child.on("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-
-    child.on("exit", (code) => {
-      clearTimeout(timeout);
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Prisma migrate deploy failed (exit ${code})`));
+        cwd: spawnCwd(),
+        stdio: ["ignore", "pipe", "pipe"],
       }
+    );
+    child.stdout.on("data", d => console.log("[Migrate]", d.toString().trimEnd()));
+    child.stderr.on("data", d => console.warn("[Migrate]", d.toString().trimEnd()));
+    const t = setTimeout(() => { child.kill(); reject(new Error("migrate timed out")); }, MIGRATION_TIMEOUT_MS);
+    child.on("error", err  => { clearTimeout(t); reject(err); });
+    child.on("exit",  code => {
+      clearTimeout(t);
+      code === 0 ? resolve() : reject(new Error(`migrate exited ${code}`));
     });
   });
+
+  console.log("[Electron] Migrations complete");
 }
+
+// ─── Server ───────────────────────────────────────────────────────────────────
 
 async function isServerReady(port) {
   try {
-    const response = await fetch(`http://localhost:${port}/api/health`);
-    return response.ok;
-  } catch {
-    return false;
-  }
+    const res = await fetch(`http://localhost:${port}/api/health`);
+    return res.ok;
+  } catch { return false; }
 }
 
 async function waitForServer(port) {
-  const start = Date.now();
-  while (Date.now() - start < SERVER_TIMEOUT_MS) {
+  const deadline = Date.now() + SERVER_TIMEOUT_MS;
+  while (Date.now() < deadline) {
     if (await isServerReady(port)) return true;
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
   }
   return false;
 }
 
-async function startServerIfNeeded() {
-  const port = Number(process.env.PORT || DEFAULT_PORT);
-  if (await isServerReady(port)) return port;
+async function startServer() {
+  const port       = Number(process.env.PORT || DEFAULT_PORT);
+  const serverPath = path.join(appRoot(), "server", "index.js");
 
-  const serverPath = path.join(app.getAppPath(), "server", "index.js");
-  const execPath = getExecPath();
-  if (!execPath || !fs.existsSync(execPath)) {
-    throw new Error("Electron executable not found; cannot start server");
+  if (!fs.existsSync(serverPath)) {
+    throw new Error(`server/index.js not found at: ${serverPath}`);
   }
 
-  serverProcess = spawn(execPath, [serverPath], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-    cwd: getRuntimeCwd(),
-    stdio: "inherit",
+  if (await isServerReady(port)) {
+    console.log("[Electron] Server already running on port", port);
+    return port;
+  }
+
+  console.log("[Electron] Spawning server…", serverPath);
+
+  serverProcess = spawn(process.execPath, [serverPath], {
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
+      ELECTRON_APP_PATH: appRoot(),
+    },
+    cwd: spawnCwd(),
+    stdio: ["ignore", "pipe", "pipe"],
   });
 
-  serverProcess.on("error", (error) => {
-    console.error("[Electron] Failed to spawn server:", error);
-  });
-
-  serverProcess.on("exit", (code, signal) => {
-    console.log("[Electron] Server exited", { code, signal });
+  serverProcess.stdout.on("data", d => console.log("[Server]",     d.toString().trimEnd()));
+  serverProcess.stderr.on("data", d => console.error("[Server:ERR]", d.toString().trimEnd()));
+  serverProcess.on("error", err  => console.error("[Electron] spawn error:", err.message));
+  serverProcess.on("exit",  (code, sig) => {
+    console.log("[Electron] Server exited — code:", code, "signal:", sig);
     serverProcess = null;
   });
 
-  const ok = await waitForServer(port);
-  if (!ok) {
-    throw new Error("Server failed to start within timeout");
+  const ready = await waitForServer(port);
+  if (!ready) {
+    throw new Error(
+      `Server did not become ready within ${SERVER_TIMEOUT_MS / 1000}s.\nCheck log: ${getLogPath()}`
+    );
   }
+
+  console.log("[Electron] Server ready on port", port);
   return port;
 }
 
-function createWindow() {
+// ─── Main window ──────────────────────────────────────────────────────────────
+
+function createMainWindow() {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 1280, height: 800,
+    show: false,
+    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: false },
   });
 
   if (process.env.ELECTRON_DEBUG === "1") {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 
-  mainWindow.webContents.on("did-fail-load", (_event, code, desc, url) => {
-    console.error("[Electron] Window failed to load", { code, desc, url });
+  mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) => {
+    console.error("[Electron] Window load failed", { code, desc, url });
   });
 
-  mainWindow.webContents.on("console-message", (_event, level, message) => {
-    console.log(`[Renderer:${level}] ${message}`);
+  mainWindow.once("ready-to-show", () => {
+    closeSplash();
+    mainWindow.show();
   });
 
   if (app.isPackaged) {
-    const indexPath = path.join(app.getAppPath(), "client", "dist", "index.html");
+    const indexPath = path.join(appRoot(), "client", "dist", "index.html");
+    console.log("[Electron] loadFile:", indexPath);
     mainWindow.loadFile(indexPath);
   } else {
     mainWindow.loadURL("http://localhost:5173");
   }
-  mainWindow.on("closed", () => {
-    mainWindow = null;
-  });
+
+  mainWindow.on("closed", () => { mainWindow = null; });
 }
 
+// ─── Lifecycle ────────────────────────────────────────────────────────────────
+
 app.whenReady().then(async () => {
+  console.log("[Electron] App ready");
+  console.log("[Electron] Log:", getLogPath());
+
+  showSplash();
+
   try {
     configureRuntimeEnv();
+
     try {
       await runMigrations();
-    } catch (error) {
-      console.warn("[Electron] Migration skipped:", error);
+    } catch (err) {
+      console.warn("[Electron] Migration warning (non-fatal):", err.message);
     }
-    await startServerIfNeeded();
-    createWindow();
-  } catch (error) {
-    console.error("[Electron] Startup failed:", error);
+
+    await startServer();
+    createMainWindow();
+
+  } catch (err) {
+    console.error("[Electron] Fatal:", err.message);
+    closeSplash();
+    const { dialog } = require("electron");
+    dialog.showErrorBox(
+      "AI POS System — Startup Failed",
+      `${err.message}\n\nLog file:\n${getLogPath()}`
+    );
     app.quit();
   }
 });
 
 app.on("before-quit", () => {
-  if (serverProcess) {
-    serverProcess.kill();
-  }
+  if (serverProcess) { serverProcess.kill(); serverProcess = null; }
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
+  if (process.platform !== "darwin") app.quit();
 });
 
 app.on("activate", () => {
-  if (mainWindow === null) {
-    createWindow();
-  }
+  if (!mainWindow) createMainWindow();
 });
