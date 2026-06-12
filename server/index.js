@@ -1,4 +1,9 @@
-require("dotenv").config();
+// In the packaged Electron app, environment variables are injected by the
+// Electron main process (electron/main.js → configureRuntimeEnv) before this
+// server is spawned. dotenv is only needed for standalone `npm run dev` usage.
+if (process.env.NODE_ENV !== "production") {
+  try { require("dotenv").config(); } catch { /* dotenv not installed — fine in prod */ }
+}
 /** @type {import("express")} */
 const express = require("express");
 /** @type {import("cors")} */

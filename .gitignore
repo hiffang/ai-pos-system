@@ -1,9 +1,60 @@
+# ─── Dependencies ────────────────────────────────────────────────────────────
 node_modules/
-dist/
-dist-electron/
-client/dist/
-.env
+
+# ─── Build outputs ────────────────────────────────────────────────────────────
+dist-electron/          # electron-builder packaged output
+client/dist/            # Vite production build
+client/.vite/           # Vite dev cache
+
+# ─── Database ─────────────────────────────────────────────────────────────────
+prisma/pos.db           # local SQLite database
+prisma/pos.db-journal   # SQLite journal
+prisma/pos.db-shm       # SQLite shared memory
+prisma/pos.db-wal       # SQLite WAL file
 *.db
-*.onnx
+*.db-journal
+*.db-shm
+*.db-wal
+
+# ─── Environment & secrets ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+jwt-secret.txt
+
+# ─── AI models (large binary files — store in Git LFS or distribute separately)
+ai/models/**/*.onnx
+ai/models/**/*.tflite
+ai/models/**/*.pmml
+# Keep manifests and the active.json pointer
+!ai/models/**/manifest.json
+!ai/models/active.json
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+electron.log
+
+# ─── OS & editor artifacts ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── Testing & coverage ───────────────────────────────────────────────────────
 coverage/
-CLAUDE.md
+.jest-cache/
+
+# ─── Prisma ───────────────────────────────────────────────────────────────────
+# Keep migrations and schema — never ignore these
+# !prisma/migrations/
+# !prisma/schema.prisma
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+.npmrc.local
+.cache/
+tmp/
