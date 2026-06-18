@@ -152,12 +152,21 @@ router.get(
         }),
       ]);
 
-      const lowStockProducts = await prisma.product.findMany({
-        select: { stockQty: true, reorderThreshold: true },
+      const allProducts = await prisma.product.findMany({
+        select: { id: true, name: true, stockQty: true, reorderThreshold: true },
       });
-      const lowStockCount = lowStockProducts.filter(
-        (product) => product.stockQty <= product.reorderThreshold,
+      const lowStockCount = allProducts.filter(
+        (p) => p.stockQty <= p.reorderThreshold,
       ).length;
+      const reorderAlerts = allProducts
+        .filter((p) => p.stockQty <= p.reorderThreshold)
+        .map((p) => ({
+          productId: p.id,
+          productName: p.name,
+          stockQty: p.stockQty,
+          reorderThreshold: p.reorderThreshold,
+        }))
+        .sort((a, b) => a.stockQty - b.stockQty);
 
       // Include PENDING payments (cashier-confirmed but gateway-unverified) as
       // well as COMPLETED; exclude only FAILED so the mix reflects real sales.
@@ -343,7 +352,6 @@ router.get(
               ? `${Math.round((1 - prediction.point / Math.max(entry.recentQty, 1)) * 100)}% Drop`
               : "Stable";
 
-          // REORDER NOW if stock won't cover the P90 upper forecast
           if (entry.stockQty <= entry.threshold) {
             recommendationResult = { recommendation: "REORDER NOW", color: "danger" };
           } else if (prediction.demandLevel === "high" || prediction.demandLevel === "very_high") {
@@ -359,12 +367,40 @@ router.get(
           recommendationResult = getRecommendation(change, entry.stockQty, entry.threshold);
         }
 
+        // Stockout: how many days until this product runs out at forecasted demand
+        let stockoutDays = null;
+        if (prediction && prediction.point > 0) {
+          stockoutDays = Math.round((entry.stockQty * 7) / prediction.point);
+        } else if (!prediction && entry.recentQty > 0) {
+          stockoutDays = Math.round((entry.stockQty * 7) / entry.recentQty);
+        }
+
+        // Restock: units needed to cover P90 demand + threshold buffer
+        const restockQty = prediction && prediction.upper > 0
+          ? Math.max(0, Math.ceil(prediction.upper + entry.threshold) - entry.stockQty)
+          : 0;
+
         return {
+          // LLM-compatible fields (used by getInsight prompt builder)
           product: entry.name,
           stock: `${entry.stockQty} Units`,
           demand: demandLabel,
           recommendation: recommendationResult.recommendation,
           color: recommendationResult.color,
+          // Enriched fields for the UI
+          productId: entry.productId,
+          productName: entry.name,
+          stockQty: entry.stockQty,
+          reorderThreshold: entry.threshold,
+          point: prediction?.point ?? 0,
+          lower: prediction?.lower ?? 0,
+          upper: prediction?.upper ?? 0,
+          confidence: prediction?.confidence ?? 0,
+          trend: prediction?.trend ?? "stable",
+          demandLevel: prediction?.demandLevel ?? "low",
+          demandLabel,
+          stockoutDays,
+          restockQty,
         };
       });
 
@@ -394,6 +430,7 @@ router.get(
           paymentMethods: paymentMethodBreakdown,
           recentTransactions,
           demandForecast,
+          reorderAlerts,
           aiInsight,
           aiInsightMeta: insightResult
             ? {
@@ -401,6 +438,7 @@ router.get(
                 generatedAt: insightResult.generatedAt,
               }
             : null,
+          aiApiKeyConfigured: !!process.env.ANTHROPIC_API_KEY,
         },
       });
     } catch (error) {

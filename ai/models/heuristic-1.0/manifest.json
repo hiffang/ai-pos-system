@@ -1,0 +1,9 @@
+{
+  "version": "heuristic-1.0",
+  "modelType": "heuristic",
+  "horizonDays": 7,
+  "name": "Calendar-Aware Heuristic",
+  "description": "Lag-average forecaster with Sri Lankan calendar multipliers. No ONNX dependency.",
+  "calendarSchemaVersion": "2025",
+  "createdAt": "2026-06-18"
+}

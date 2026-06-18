@@ -302,4 +302,66 @@ async function getCachedInsight() {
   };
 }
 
-module.exports = { getInsight, getCachedInsight };
+/**
+ * Bypass all three cost-control gates and force a fresh Claude API call.
+ * Falls back to the cached narrative when the API key is missing or the
+ * call fails so the caller always gets something useful.
+ *
+ * @param {ForecastEntry[]} forecasts
+ * @param {{ todayRevenue: number, ordersToday: number, lowStockItems: number }} summary
+ * @returns {Promise<InsightResult | null>}
+ */
+async function forceRefreshInsight(forecasts, summary) {
+  if (!forecasts || forecasts.length === 0) return null;
+
+  const inputHash = hashForecasts(forecasts);
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn("[LLMInsight] forceRefresh: ANTHROPIC_API_KEY not set");
+    const cached = await getActiveInsight();
+    if (cached) {
+      return { narrative: cached.narrative, fromCache: true, generatedAt: cached.generatedAt };
+    }
+    return null;
+  }
+
+  try {
+    console.log("[LLMInsight] Force-refreshing insight via Claude API...");
+    const prompt = buildPrompt(forecasts, summary);
+    const narrative = await callClaudeApi(prompt);
+    const saved = await saveInsight(narrative, inputHash);
+    console.log("[LLMInsight] Force-refresh complete");
+    return { narrative: saved.narrative, fromCache: false, generatedAt: saved.generatedAt };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("[LLMInsight] Force-refresh API call failed:", message);
+    const cached = await getActiveInsight();
+    if (cached) {
+      return { narrative: cached.narrative, fromCache: true, generatedAt: cached.generatedAt };
+    }
+    return null;
+  }
+}
+
+/**
+ * Return the last `limit` insight records for the history timeline.
+ *
+ * @param {number} [limit]
+ * @returns {Promise<Array<{ id: string, narrative: string, modelUsed: string | null, inputHash: string, generatedAt: Date, stale: boolean }>>}
+ */
+async function getInsightsHistory(limit = 10) {
+  return prisma.aIInsight.findMany({
+    orderBy: { generatedAt: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      narrative: true,
+      modelUsed: true,
+      inputHash: true,
+      generatedAt: true,
+      stale: true,
+    },
+  });
+}
+
+module.exports = { getInsight, getCachedInsight, forceRefreshInsight, getInsightsHistory };

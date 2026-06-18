@@ -741,3 +741,63 @@ export async function fetchDashboardOverview() {
     return {};
   }
 }
+
+/**
+ * Fetch full AI insights payload for the Insights page.
+ * @returns {Promise<object>} - { narrative, summary, forecasts, model, apiKeyConfigured }
+ */
+export async function fetchAIInsights() {
+  try {
+    const response = await apiFetch(`${API_BASE}/ai/insights`);
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.data || {};
+  } catch (error) {
+    console.error("[API] Failed to fetch AI insights:", error);
+    return {};
+  }
+}
+
+/**
+ * Fetch the last 10 AI insight narratives for the history timeline.
+ * @returns {Promise<Array<object>>}
+ */
+export async function fetchInsightsHistory() {
+  try {
+    const response = await apiFetch(`${API_BASE}/ai/insights/history`);
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error("[API] Failed to fetch insights history:", error);
+    return [];
+  }
+}
+
+/**
+ * Force a fresh Claude API call bypassing all cost-control gates.
+ * Returns the new insight or null; throws on HTTP 429 (rate-limited).
+ * @returns {Promise<object|null>}
+ */
+export async function refreshInsight() {
+  const response = await apiFetch(`${API_BASE}/ai/insights/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (response.status === 429) {
+    const body = await response.json().catch(() => ({}));
+    const err = new Error(body.message || "Rate limited");
+    err.retryAfterSeconds = body.retryAfterSeconds;
+    throw err;
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.message || `Refresh failed (${response.status})`);
+  }
+  const data = await response.json();
+  return data.data || null;
+}
