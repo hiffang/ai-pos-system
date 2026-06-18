@@ -1,6 +1,6 @@
 // Central error handling middleware for all Express routes
 /** @type {import("express").ErrorRequestHandler} */
-const errorHandler = (err, req, res, next) => {
+const errorHandler = (err, req, res, _next) => {
   console.error("[Error]", err.message || err);
 
   // Prisma validation errors

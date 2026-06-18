@@ -9,7 +9,7 @@
     "electron": "electron .",
     "package": "npm run build && electron-builder --publish never",
     "test": "jest --runInBand",
-    "lint": "eslint . --ext .js,.jsx",
+    "lint": "eslint .",
     "format": "prettier --write .",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

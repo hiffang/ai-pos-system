@@ -26,7 +26,7 @@ export default function POSTerminal() {
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [_isLoading, setIsLoading] = useState(true);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("CASH");
   const [isCashDialogOpen, setIsCashDialogOpen] = useState(false);
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);

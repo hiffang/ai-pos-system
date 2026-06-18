@@ -18,7 +18,6 @@ let PrinterTypes = null;
 function loadLibrary() {
   if (ThermalPrinter) return;
   try {
-    // eslint-disable-next-line global-require
     const lib = require("node-thermal-printer");
     ThermalPrinter = lib.printer;
     PrinterTypes = lib.types;

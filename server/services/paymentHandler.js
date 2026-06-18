@@ -106,7 +106,7 @@ async function processPayment(orderId, method, amount, metadata = {}) {
  * @param {string} signature - PayHere signature for verification
  * @returns {Promise<object>} - Verified payment record
  */
-async function verifyPayHerePayment(paymentId, signature) {
+async function verifyPayHerePayment(paymentId, _signature) {
   try {
     // TODO: Implement PayHere webhook signature verification
     // For now, mark as verified (implement actual verification per PayHere docs)
