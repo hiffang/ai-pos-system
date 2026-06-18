@@ -47,7 +47,11 @@
       "createStartMenuShortcut": true
     },
     "beforeBuild": "scripts/beforeBuild.js",
-    "afterPack": "scripts/afterPack.js"
+    "afterPack": "scripts/afterPack.js",
+    "publish": {
+      "provider": "github",
+      "releaseType": "release"
+    }
   },
   "keywords": [],
   "author": "",

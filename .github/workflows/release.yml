@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+# Needed for electron-builder to create/update the GitHub Release
+permissions:
+  contents: write
+
+jobs:
+  release-windows:
+    name: Build & release (Windows x64)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Vite frontend
+        run: npm run build
+
+      - name: Package & publish Electron installer
+        # beforeBuild.js: runs prisma generate + migrate deploy (seed DB)
+        # afterPack.js:   runs npm install --production in staged app dir
+        # --publish always uploads the .exe to the GitHub Release for this tag
+        run: npx electron-builder --win --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
