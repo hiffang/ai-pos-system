@@ -77,9 +77,6 @@
     "winston": "^3.19.0",
     "zustand": "^5.0.12"
   },
-  "optionalDependencies": {
-    "onnxruntime-node": "^1.25.1"
-  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.4",
     "@tailwindcss/vite": "^4.2.4",
