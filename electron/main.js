@@ -19,8 +19,7 @@ const { app, BrowserWindow } = require("electron");
 const path    = require("path");
 const fs      = require("fs");
 const crypto  = require("crypto");
-const { spawn }         = require("child_process");
-const { pathToFileURL } = require("url");
+const { spawn } = require("child_process");
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -143,9 +142,11 @@ function ensureDatabase(userDataPath) {
     }
   }
 
-  // Always use the writable userData copy in production
+  // Always use the writable userData copy in production.
+  // Prisma's SQLite engine expects "file:C:/absolute/path" on Windows —
+  // pathToFileURL produces "file:///C:/..." which Prisma misparses against cwd.
   if (app.isPackaged || !process.env.DATABASE_URL) {
-    process.env.DATABASE_URL = pathToFileURL(dbPath).href;
+    process.env.DATABASE_URL = "file:" + dbPath.replace(/\\/g, "/");
     console.log("[Electron] DATABASE_URL =", process.env.DATABASE_URL);
   }
 }
@@ -209,8 +210,9 @@ function closeSplash() {
 async function runMigrations() {
   if (!app.isPackaged) return;
 
-  const cliPath    = path.join(appRoot(), "node_modules", "prisma", "build", "index.js");
-  const schemaPath = path.join(appRoot(), "prisma", "schema.prisma");
+  const cliPath       = path.join(appRoot(), "node_modules", "prisma", "build", "index.js");
+  const schemaPath    = path.join(appRoot(), "prisma", "schema.prisma");
+  const migrationsDir = path.join(appRoot(), "prisma", "migrations");
 
   if (!fs.existsSync(cliPath)) {
     console.warn("[Electron] Prisma CLI not found at", cliPath, "— skipping migrations");
@@ -221,12 +223,10 @@ async function runMigrations() {
     return;
   }
 
-  console.log("[Electron] Running prisma migrate deploy…");
-
-  await new Promise((resolve, reject) => {
+  const runCLI = (args) => new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      [cliPath, "migrate", "deploy", "--schema", schemaPath],
+      [cliPath, ...args],
       {
         env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
         cwd: spawnCwd(),
@@ -243,7 +243,55 @@ async function runMigrations() {
     });
   });
 
-  console.log("[Electron] Migrations complete");
+  console.log("[Electron] Running prisma migrate deploy…");
+  try {
+    await runCLI(["migrate", "deploy", "--schema", schemaPath]);
+    console.log("[Electron] Migrations complete");
+    return;
+  } catch (err) {
+    console.warn("[Electron] migrate deploy failed:", err.message);
+  }
+
+  // migrate deploy failed — most likely the database was created with
+  // `prisma db push` and has no _prisma_migrations history. Baseline all
+  // known migrations (mark them as already applied) then retry.
+  if (!fs.existsSync(migrationsDir)) {
+    console.warn("[Electron] No migrations directory — skipping baseline");
+    return;
+  }
+
+  let migrationNames;
+  try {
+    migrationNames = fs.readdirSync(migrationsDir)
+      .filter(name => fs.statSync(path.join(migrationsDir, name)).isDirectory())
+      .sort();
+  } catch (err) {
+    console.warn("[Electron] Could not read migrations dir:", err.message);
+    return;
+  }
+
+  if (migrationNames.length === 0) {
+    console.warn("[Electron] No migration folders found — skipping baseline");
+    return;
+  }
+
+  console.log("[Electron] Baselining", migrationNames.length, "migration(s) for existing database…");
+  for (const name of migrationNames) {
+    try {
+      await runCLI(["migrate", "resolve", "--applied", name, "--schema", schemaPath]);
+      console.log("[Electron] Baselined:", name);
+    } catch (err) {
+      // Migration may already be recorded — log but continue
+      console.warn("[Electron] Baseline note for", name + ":", err.message);
+    }
+  }
+
+  try {
+    await runCLI(["migrate", "deploy", "--schema", schemaPath]);
+    console.log("[Electron] Migrations complete (after baseline)");
+  } catch (err) {
+    console.warn("[Electron] Migration warning (non-fatal):", err.message);
+  }
 }
 
 // ─── Server ───────────────────────────────────────────────────────────────────

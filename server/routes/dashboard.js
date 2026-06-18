@@ -159,14 +159,16 @@ router.get(
         (product) => product.stockQty <= product.reorderThreshold,
       ).length;
 
+      // Include PENDING payments (cashier-confirmed but gateway-unverified) as
+      // well as COMPLETED; exclude only FAILED so the mix reflects real sales.
       const paymentsByMethod = await prisma.payment.groupBy({
         by: ["method"],
         where: {
-          status: "COMPLETED",
+          status: { not: "FAILED" },
           createdAt: { gte: sevenDaysAgo, lte: todayEnd },
         },
         _sum: { amountLKR: true },
-        _count: true,
+        _count: { _all: true },
       });
 
       const paymentMethods = paymentsByMethod.map((entry) => {
@@ -174,7 +176,7 @@ router.get(
         return {
           method: entry.method,
           amount,
-          count: entry._count,
+          count: entry._count._all,
         };
       });
       const totalPaymentsAmount = paymentMethods.reduce(

@@ -2,15 +2,17 @@
 node_modules/
 
 # ─── Build outputs ────────────────────────────────────────────────────────────
-dist-electron/          # electron-builder packaged output
-client/dist/            # Vite production build
-client/.vite/           # Vite dev cache
+# electron-builder packaged output
+dist-electron/
+# Vite production build and dev cache
+client/dist/
+client/.vite/
 
 # ─── Database ─────────────────────────────────────────────────────────────────
-prisma/pos.db           # local SQLite database
-prisma/pos.db-journal   # SQLite journal
-prisma/pos.db-shm       # SQLite shared memory
-prisma/pos.db-wal       # SQLite WAL file
+prisma/pos.db
+prisma/pos.db-journal
+prisma/pos.db-shm
+prisma/pos.db-wal
 *.db
 *.db-journal
 *.db-shm
@@ -58,3 +60,4 @@ coverage/
 .npmrc.local
 .cache/
 tmp/
+.gitignore

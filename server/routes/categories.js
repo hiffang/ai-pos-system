@@ -59,8 +59,9 @@ router.get(
     /** @type {import("express").NextFunction} */ next,
   ) => {
     try {
+      const id = /** @type {string} */ (req.params.id);
       const category = await prisma.category.findUnique({
-        where: { id: req.params.id },
+        where: { id },
         include: {
           products: true,
           _count: {
@@ -143,12 +144,13 @@ router.put(
         throw createHttpError("Category name is required", 400);
       }
 
+      const id = /** @type {string} */ (req.params.id);
       const category = await localWrite({
         operation: "UPDATE",
         entity: "Category",
         write: (tx) =>
           tx.category.update({
-            where: { id: req.params.id },
+            where: { id },
             data: { name },
           }),
       });
@@ -173,12 +175,13 @@ router.delete(
     /** @type {import("express").NextFunction} */ next,
   ) => {
     try {
+      const id = /** @type {string} */ (req.params.id);
       await localWrite({
         operation: "DELETE",
         entity: "Category",
         write: async (tx) => {
           const count = await tx.product.count({
-            where: { categoryId: req.params.id },
+            where: { categoryId: id },
           });
 
           if (count > 0) {
@@ -189,7 +192,7 @@ router.delete(
           }
 
           return tx.category.delete({
-            where: { id: req.params.id },
+            where: { id },
           });
         },
       });
