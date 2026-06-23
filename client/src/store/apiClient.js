@@ -42,11 +42,14 @@ async function apiFetch(input, options = {}) {
   const response = await fetch(input, { ...options, headers });
   if (response.status === 401 && !options.skipAuthRedirect) {
     setAuthToken(null);
-    if (
-      typeof window !== "undefined" &&
-      window.location.pathname !== "/login"
-    ) {
-      window.location.href = "/login";
+    if (typeof window !== "undefined") {
+      const isFile = window.location.protocol === "file:";
+      const alreadyOnLogin = isFile
+        ? !window.location.hash.startsWith("#/login")
+        : window.location.pathname !== "/login";
+      if (alreadyOnLogin) {
+        window.location.href = isFile ? "#/login" : "/login";
+      }
     }
   }
   return response;
@@ -561,6 +564,30 @@ export async function createTransaction(transaction) {
   } catch (error) {
     console.error("[API] Failed to create transaction:", error);
     throw error;
+  }
+}
+
+/**
+ * Fetch a paginated list of transactions.
+ * @param {{ skip?: number, take?: number, startDate?: string, endDate?: string }} options
+ * @returns {Promise<{ data: object[], pagination: { skip: number, take: number, total: number } }>}
+ */
+export async function fetchTransactions(options = {}) {
+  try {
+    const { skip = 0, take = 20, startDate, endDate } = options;
+    const params = new URLSearchParams({ skip, take });
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
+    const response = await apiFetch(`${API_BASE}/transactions?${params}`);
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    const body = await response.json();
+    return {
+      data: body.data || [],
+      pagination: body.pagination || { skip, take, total: 0 },
+    };
+  } catch (error) {
+    console.error("[API] Failed to fetch transactions:", error);
+    return { data: [], pagination: { skip: 0, take: 20, total: 0 } };
   }
 }
 
