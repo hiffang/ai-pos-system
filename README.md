@@ -3,6 +3,9 @@
 # AI POS System
 
 **Offline-first point-of-sale terminal for Sri Lankan small grocery shops**
+<img width="1906" height="880" alt="image" src="https://github.com/user-attachments/assets/f1fa749b-6b7f-40ee-acd6-36cbe08efcc1" />
+<img width="1907" height="881" alt="image" src="https://github.com/user-attachments/assets/795d0d63-f171-40a2-ba8a-948c5ad69d45" />
+
 
 [![CI](https://github.com/hiffang/ai-pos-system/actions/workflows/ci.yml/badge.svg)](https://github.com/hiffang/ai-pos-system/actions/workflows/ci.yml)
 [![Release](https://github.com/hiffang/ai-pos-system/actions/workflows/release.yml/badge.svg)](https://github.com/hiffang/ai-pos-system/actions/workflows/release.yml)
