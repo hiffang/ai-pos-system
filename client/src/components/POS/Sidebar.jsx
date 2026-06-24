@@ -5,6 +5,7 @@ const navItems = [
   { path: "/pos", icon: "point_of_sale", label: "POS Terminal", minRole: "CASHIER" },
   { path: "/dashboard", icon: "dashboard", label: "Dashboard", minRole: "MANAGER" },
   { path: "/inventory", icon: "inventory_2", label: "Inventory", minRole: "MANAGER" },
+  { path: "/transactions", icon: "receipt_long", label: "Transactions", minRole: "CASHIER" },
   { path: "/settings", icon: "settings", label: "Settings", minRole: "CASHIER" },
 ];
 

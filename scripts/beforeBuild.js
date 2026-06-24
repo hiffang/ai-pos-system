@@ -24,18 +24,22 @@ module.exports = async function beforeBuild({ appDir }) {
   // Seed an empty database into prisma/ so ensureDatabase() in main.js can
   // copy it to userData on first launch.  This avoids a blank-screen startup
   // caused by Prisma finding no database file when the user first runs the app.
-  const dbPath = path.join(appDir, "prisma", "pos.db");
+  //
+  // IMPORTANT: this file must NOT be prisma/pos.db — that's the developer's
+  // live dev database (DATABASE_URL=file:./pos.db resolves there too). A
+  // previous version of this script deleted and regenerated pos.db directly,
+  // which silently wiped dev transaction history every time `npm run package`
+  // was run. seed.db is a separate, disposable build artifact.
+  const dbPath = path.join(appDir, "prisma", "seed.db");
   // Prisma's SQLite engine on Windows expects "file:C:/..." (forward slashes,
   // no triple-slash). Using backslashes or file:/// causes path misparse.
   const dbUrl = "file:" + dbPath.replace(/\\/g, "/");
 
   // Always regenerate the seed DB from migrations so it always has a clean
-  // _prisma_migrations history. An existing pos.db from `db push` or prisma
-  // studio would have no history, causing runMigrations() to fail on first
-  // install. pos.db is only a bundled template — the live DB lives in userData.
+  // _prisma_migrations history.
   if (fs.existsSync(dbPath)) {
     fs.unlinkSync(dbPath);
-    console.log("[beforeBuild] Removed existing prisma/pos.db — will regenerate with correct migration history.");
+    console.log("[beforeBuild] Removed existing prisma/seed.db — will regenerate with correct migration history.");
   }
 
   console.log("[beforeBuild] Running migrate deploy to create seed DB...");
@@ -62,5 +66,5 @@ module.exports = async function beforeBuild({ appDir }) {
     });
   }
 
-  console.log("[beforeBuild] Seed database created at prisma/pos.db");
+  console.log("[beforeBuild] Seed database created at prisma/seed.db");
 };

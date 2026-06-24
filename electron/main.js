@@ -133,12 +133,12 @@ function ensureDatabase(userDataPath) {
   const dbPath = path.join(dataDir, "pos.db");
 
   if (!fs.existsSync(dbPath)) {
-    const bundled = path.join(appRoot(), "prisma", "pos.db");
+    const bundled = path.join(appRoot(), "prisma", "seed.db");
     if (fs.existsSync(bundled)) {
       fs.copyFileSync(bundled, dbPath);
       console.log("[Electron] Copied seed database to", dbPath);
     } else {
-      console.warn("[Electron] No bundled pos.db — Prisma will create a blank database");
+      console.warn("[Electron] No bundled seed.db — Prisma will create a blank database");
     }
   }
 

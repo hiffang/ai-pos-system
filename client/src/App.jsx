@@ -4,6 +4,7 @@ import MainLayout from "./MainLayout";
 import POSTerminal from "./components/POS/POSTerminal";
 import Dashboard from "./components/Dashboard/Dashboard";
 import Inventory from "./pages/Inventory";
+import Transactions from "./pages/Transactions";
 import Settings from "./pages/Settings";
 import Help from "./pages/Help";
 import Login from "./pages/Login";
@@ -49,6 +50,7 @@ export default function App() {
               </AuthGuard>
             }
           />
+          <Route path="/transactions" element={<Transactions />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/users" element={<Navigate to="/settings" replace />} />
           <Route path="/help" element={<Help />} />

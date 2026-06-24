@@ -2,6 +2,7 @@ export default function TransactionsList({
   transactions = [],
   isLoading = false,
   onSelect,
+  onViewAll,
 }) {
   const formatLkr = (amount) =>
     `LKR ${amount.toLocaleString("en-LK", {
@@ -59,7 +60,10 @@ export default function TransactionsList({
     <div className="bg-surface rounded-xl shadow-sm flex flex-col">
       <div className="p-6 border-b border-gray-100 flex justify-between items-center">
         <h3 className="font-h3 text-text-main">Recent Transactions</h3>
-        <button className="text-xs font-bold text-primary hover:bg-primary-fixed-dim px-3 py-1 rounded transition-colors">
+        <button
+          onClick={onViewAll}
+          className="text-xs font-bold text-primary hover:bg-primary-fixed-dim px-3 py-1 rounded transition-colors"
+        >
           View All
         </button>
       </div>

@@ -10,6 +10,7 @@ import {
   refreshInsight,
 } from "../../store/apiClient";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const REFRESH_COOLDOWN_MS = 2 * 60 * 1000;
 
@@ -29,6 +30,7 @@ function RelativeTime({ date }) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [overview, setOverview] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [receipt, setReceipt] = useState(null);
@@ -253,6 +255,7 @@ export default function Dashboard() {
           transactions={overview?.recentTransactions || []}
           isLoading={isLoading}
           onSelect={handleSelectTransaction}
+          onViewAll={() => navigate("/transactions")}
         />
       </div>
 

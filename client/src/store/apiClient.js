@@ -491,6 +491,32 @@ export async function fetchProductByBarcode(code) {
 }
 
 /**
+ * Create a new product
+ * @param {object} payload
+ * @returns {Promise<object>}
+ */
+export async function createProduct(payload) {
+  try {
+    const response = await apiFetch(`${API_BASE}/products`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.message || `API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.data ? normalizeProduct(data.data) : null;
+  } catch (error) {
+    console.error("[API] Failed to create product:", error);
+    throw error;
+  }
+}
+
+/**
  * Update a product
  * @param {string} id
  * @param {object} payload

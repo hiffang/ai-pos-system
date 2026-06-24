@@ -4,10 +4,27 @@ import {
   fetchCategories,
   fetchProductsPage,
   fetchProductsSummary,
+  createProduct,
   updateProduct,
   deleteProduct,
   fetchBatchForecasts,
 } from "../store/apiClient";
+
+// USB HID barcode scanners type characters as a rapid burst terminated by Enter.
+// 50ms between keys is well above typical scanner speed (~5ms) and well below
+// human typing (~150-200ms), so it cleanly separates scans from manual input.
+const SCAN_KEY_GAP_MS = 50;
+const MIN_BARCODE_LENGTH = 8;
+
+const EMPTY_PRODUCT_FORM = {
+  name: "",
+  sku: "",
+  barcode: "",
+  priceLKR: "",
+  stockQty: "",
+  reorderThreshold: "10",
+  categoryId: "",
+};
 
 const STATUS_COLORS = {
   "In Stock": "bg-green-100 text-green-700",
@@ -77,6 +94,7 @@ export default function Inventory() {
   const [productsError, setProductsError] = useState("");
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
   const [activeProduct, setActiveProduct] = useState(null);
   const [editForm, setEditForm] = useState({
     name: "",
@@ -87,6 +105,10 @@ export default function Inventory() {
     reorderThreshold: "",
     categoryId: "",
   });
+  const [addForm, setAddForm] = useState(EMPTY_PRODUCT_FORM);
+  const [addFormError, setAddFormError] = useState("");
+  const [addSaving, setAddSaving] = useState(false);
+  const [lastScanned, setLastScanned] = useState(false);
   const [formError, setFormError] = useState("");
   const [forecasts, setForecasts] = useState({});
   const [forecastsLoading, setForecastsLoading] = useState(false);
@@ -243,9 +265,103 @@ export default function Inventory() {
     setIsDeleteOpen(true);
   };
 
+  const openAddModal = () => {
+    setAddForm(EMPTY_PRODUCT_FORM);
+    setAddFormError("");
+    setLastScanned(false);
+    setIsAddOpen(true);
+  };
+
+  const closeAddModal = () => {
+    setIsAddOpen(false);
+  };
+
   const handleEditChange = (field, value) => {
     setEditForm((current) => ({ ...current, [field]: value }));
   };
+
+  const handleAddChange = (field, value) => {
+    if (field === "barcode") setLastScanned(false);
+    setAddForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleCreateProduct = async () => {
+    if (!addForm.name || !addForm.sku || !addForm.categoryId) {
+      setAddFormError("Name, SKU, and category are required.");
+      return;
+    }
+
+    const parsedPrice = parseFloat(addForm.priceLKR);
+    if (Number.isNaN(parsedPrice)) {
+      setAddFormError("Price must be a number.");
+      return;
+    }
+
+    const parsedStock = addForm.stockQty ? parseInt(addForm.stockQty, 10) : 0;
+    const parsedThreshold = addForm.reorderThreshold
+      ? parseInt(addForm.reorderThreshold, 10)
+      : 0;
+
+    setAddSaving(true);
+    setAddFormError("");
+    try {
+      await createProduct({
+        name: addForm.name,
+        sku: addForm.sku,
+        barcode: addForm.barcode.trim(),
+        priceLKR: parsedPrice,
+        stockQty: parsedStock,
+        reorderThreshold: parsedThreshold,
+        categoryId: addForm.categoryId,
+      });
+      setIsAddOpen(false);
+      setCurrentPage(1);
+      await loadProducts();
+    } catch (error) {
+      setAddFormError(error.message || "Failed to create product.");
+    } finally {
+      setAddSaving(false);
+    }
+  };
+
+  // Barcode scanner support: while the Add Product modal is open, a USB HID
+  // scan (rapid keystroke burst terminated by Enter) auto-fills the barcode
+  // field regardless of which input currently has focus — the cashier/manager
+  // doesn't need to click into the barcode field first.
+  useEffect(() => {
+    if (!isAddOpen) return;
+
+    let buffer = "";
+    let lastKeyAt = 0;
+
+    const onKeyDown = (e) => {
+      const now = Date.now();
+      const gap = now - lastKeyAt;
+      lastKeyAt = now;
+
+      if (gap > SCAN_KEY_GAP_MS) {
+        buffer = "";
+      }
+
+      if (e.key === "Enter") {
+        const candidate = buffer;
+        buffer = "";
+        if (candidate.length >= MIN_BARCODE_LENGTH && /^\d+$/.test(candidate)) {
+          e.preventDefault();
+          setAddForm((current) => ({ ...current, barcode: candidate }));
+          setLastScanned(true);
+        }
+        return;
+      }
+
+      if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isAddOpen]);
 
   const handleSaveProduct = async () => {
     if (!activeProduct) return;
@@ -305,7 +421,10 @@ export default function Inventory() {
             Manage stock levels and product catalog across branches.
           </p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium">
+        <button
+          onClick={openAddModal}
+          className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium"
+        >
           <span className="material-symbols-outlined">add</span>
           Add Product
         </button>
@@ -576,6 +695,158 @@ export default function Inventory() {
         categories={categories}
         onCategoriesChange={loadCategories}
       />
+
+      {isAddOpen ? (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-lg p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Add Product
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-sm leading-none">
+                    barcode_scanner
+                  </span>
+                  Scan a barcode anytime while this is open — it auto-fills below
+                </p>
+              </div>
+              <button
+                className="text-gray-500 hover:text-gray-800"
+                onClick={closeAddModal}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Name
+                </label>
+                <input
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  value={addForm.name}
+                  onChange={(e) => handleAddChange("name", e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  SKU
+                </label>
+                <input
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  value={addForm.sku}
+                  onChange={(e) => handleAddChange("sku", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Barcode
+                  <span className="text-gray-400 font-normal ml-1">
+                    (scan or type, leave empty for none)
+                  </span>
+                </label>
+                <div className="relative mt-1">
+                  <input
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    placeholder="e.g. 4792024000018"
+                    value={addForm.barcode}
+                    onChange={(e) => handleAddChange("barcode", e.target.value)}
+                  />
+                  {lastScanned ? (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-teal-600 flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm leading-none">
+                        check_circle
+                      </span>
+                      Scanned
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Price (LKR)
+                  </label>
+                  <input
+                    type="number"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    value={addForm.priceLKR}
+                    onChange={(e) => handleAddChange("priceLKR", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Stock
+                  </label>
+                  <input
+                    type="number"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    value={addForm.stockQty}
+                    onChange={(e) => handleAddChange("stockQty", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Threshold
+                  </label>
+                  <input
+                    type="number"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    value={addForm.reorderThreshold}
+                    onChange={(e) =>
+                      handleAddChange("reorderThreshold", e.target.value)
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Category
+                  </label>
+                  <select
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    value={addForm.categoryId}
+                    onChange={(e) =>
+                      handleAddChange("categoryId", e.target.value)
+                    }
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {addFormError ? (
+                <p className="text-sm text-red-600">{addFormError}</p>
+              ) : null}
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900"
+                onClick={closeAddModal}
+                disabled={addSaving}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-60"
+                onClick={handleCreateProduct}
+                disabled={addSaving}
+              >
+                {addSaving ? "Adding…" : "Add Product"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {isEditOpen ? (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
