@@ -4,6 +4,8 @@ import PaymentMethodChart from "./PaymentMethodChart";
 import DemandForecastTable from "./DemandForecastTable";
 import TransactionsList from "./TransactionsList";
 import ReceiptModal from "./ReceiptModal";
+import PromotionsPanel from "../PromotionsPanel";
+import DiscountModal from "../DiscountModal";
 import {
   fetchDashboardOverview,
   fetchTransactionById,
@@ -39,6 +41,9 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState(null);
   const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [discountTarget, setDiscountTarget] = useState(null);
+  const [discountPrefill, setDiscountPrefill] = useState(null);
+  const [promotionsReloadToken, setPromotionsReloadToken] = useState(0);
 
   const handleSelectTransaction = useCallback(async (tx) => {
     if (!tx?.id) return;
@@ -54,6 +59,21 @@ export default function Dashboard() {
     setReceiptOpen(false);
     setReceipt(null);
     setReceiptLoading(false);
+  }, []);
+
+  // Used by PromotionsPanel's "Create Discount" buttons, which only have a
+  // productId/productName (not a full product row).
+  const handleCreateDiscountFromRecommendation = useCallback((input) => {
+    setDiscountTarget({ id: input.productId, name: input.productName });
+    setDiscountPrefill({
+      suggestedValue: input.suggestedValue,
+      suggestedReason: input.suggestedReason,
+    });
+  }, []);
+
+  const handleDiscountSaved = useCallback(() => {
+    setDiscountTarget(null);
+    setPromotionsReloadToken((t) => t + 1);
   }, []);
 
   useEffect(() => {
@@ -246,6 +266,12 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Promotion Recommendations & Frequently Bought Together */}
+      <PromotionsPanel
+        reloadToken={promotionsReloadToken}
+        onCreateDiscount={handleCreateDiscountFromRecommendation}
+      />
+
       {/* Demand forecast — full width so the 6-column table has room */}
       <DemandForecastTable forecasts={overview?.demandForecast || []} isLoading={isLoading} />
 
@@ -262,6 +288,13 @@ export default function Dashboard() {
       {receiptOpen ? (
         <ReceiptModal transaction={receipt} isLoading={receiptLoading} onClose={handleCloseReceipt} />
       ) : null}
+
+      <DiscountModal
+        target={discountTarget}
+        prefill={discountPrefill}
+        onClose={() => setDiscountTarget(null)}
+        onSaved={handleDiscountSaved}
+      />
     </div>
   );
 }
