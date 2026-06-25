@@ -243,9 +243,23 @@ function normalizeProduct(product) {
         ? "low"
         : "ok";
 
+  const originalPrice = Number.isNaN(parsedPrice) ? 0 : parsedPrice;
+  // effectivePriceLKR is computed server-side from any active discount.
+  // `price` becomes the effective (possibly discounted) price everywhere —
+  // POS cart totals, checkout, and the product grid all just work as-is.
+  const effectiveValue = product.effectivePriceLKR;
+  const parsedEffective =
+    typeof effectiveValue === "string" ? parseFloat(effectiveValue) : effectiveValue;
+  const effectivePrice =
+    parsedEffective !== undefined && !Number.isNaN(parsedEffective)
+      ? parsedEffective
+      : originalPrice;
+
   return {
     ...product,
-    price: Number.isNaN(parsedPrice) ? 0 : parsedPrice,
+    price: effectivePrice,
+    originalPrice,
+    discount: product.discount ?? null,
     stock: normalizedStock,
     threshold: normalizedThreshold,
     category: categoryName,
@@ -853,4 +867,89 @@ export async function refreshInsight() {
   }
   const data = await response.json();
   return data.data || null;
+}
+
+// ---- Discounts (MANAGER only) -------------------------------------------
+
+/**
+ * Fetch all currently-active discounts.
+ * @returns {Promise<Array<object>>}
+ */
+export async function fetchDiscounts() {
+  try {
+    const response = await apiFetch(`${API_BASE}/discounts`);
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error("[API] Failed to fetch discounts:", error);
+    return [];
+  }
+}
+
+/**
+ * Create (or replace) the active discount for a product.
+ * @param {{ productId: string, type: "PERCENTAGE"|"FIXED", value: number, reason?: string, endDate?: string }} payload
+ * @returns {Promise<object>}
+ */
+export async function createDiscount(payload) {
+  const response = await apiFetch(`${API_BASE}/discounts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message || `Create discount failed (${response.status})`);
+  }
+  return body.data;
+}
+
+/**
+ * Deactivate a discount.
+ * @param {string} id
+ */
+export async function deleteDiscount(id) {
+  const response = await apiFetch(`${API_BASE}/discounts/${id}`, {
+    method: "DELETE",
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.message || `Remove discount failed (${response.status})`);
+  }
+  return true;
+}
+
+// ---- Promotion recommendations (MANAGER only) ---------------------------
+
+/**
+ * Products with demand far below current stock — overstock clearance candidates.
+ * @returns {Promise<Array<object>>}
+ */
+export async function fetchOverstockRecommendations() {
+  try {
+    const response = await apiFetch(`${API_BASE}/promotions/overstock`);
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error("[API] Failed to fetch overstock recommendations:", error);
+    return [];
+  }
+}
+
+/**
+ * Frequently-bought-together product pairs (market basket analysis).
+ * @returns {Promise<Array<object>>}
+ */
+export async function fetchBasketRecommendations() {
+  try {
+    const response = await apiFetch(`${API_BASE}/promotions/basket`);
+    if (!response.ok) throw new Error(`API error: ${response.status}`);
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error("[API] Failed to fetch basket recommendations:", error);
+    return [];
+  }
 }

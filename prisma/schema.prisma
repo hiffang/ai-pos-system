@@ -45,7 +45,25 @@ model Product {
   reorderThreshold Int            @default(10)
   orderItems       OrderItem[]
   inventoryLogs    InventoryLog[]
+  discounts        Discount[]
   updatedAt        DateTime       @updatedAt
+}
+
+// Discount type values: PERCENTAGE | FIXED
+// Only one discount per product should be `active` at a time — enforced in
+// app code (server/services/discountService.js), not at the schema level,
+// since SQLite has no partial unique indexes.
+model Discount {
+  id        String    @id @default(uuid())
+  productId String
+  product   Product   @relation(fields: [productId], references: [id])
+  type      String
+  value     Decimal
+  reason    String?
+  startDate DateTime  @default(now())
+  endDate   DateTime?
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
 }
 
 model Order {

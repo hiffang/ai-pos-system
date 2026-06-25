@@ -31,9 +31,11 @@ const aiRoutes = require("./routes/ai");
 const authRoutes = require("./routes/auth");
 const categoriesRoutes = require("./routes/categories");
 const dashboardRoutes = require("./routes/dashboard");
+const discountsRoutes = require("./routes/discounts");
 const hardwareRoutes = require("./routes/hardware");
 const paymentsRoutes = require("./routes/payments");
 const productsRoutes = require("./routes/products");
+const promotionsRoutes = require("./routes/promotions");
 const transactionsRoutes = require("./routes/transactions");
 const usersRoutes = require("./routes/users");
 
@@ -144,6 +146,8 @@ app.use("/api/hardware", authenticate, requireRole("CASHIER"), hardwareRoutes);
 
 app.use("/api/dashboard", authenticate, requireRole("MANAGER"), dashboardRoutes);
 app.use("/api/ai", authenticate, requireRole("MANAGER"), aiRoutes);
+app.use("/api/discounts", authenticate, requireRole("MANAGER"), discountsRoutes);
+app.use("/api/promotions", authenticate, requireRole("MANAGER"), promotionsRoutes);
 
 app.use("/api/users", authenticate, requireRole("ADMIN"), usersRoutes);
 

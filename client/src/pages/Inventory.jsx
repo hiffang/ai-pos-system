@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import CategoryManager from "../components/CategoryManager";
+import PromotionsPanel from "../components/PromotionsPanel";
 import {
   fetchCategories,
   fetchProductsPage,
@@ -8,6 +9,8 @@ import {
   updateProduct,
   deleteProduct,
   fetchBatchForecasts,
+  createDiscount,
+  deleteDiscount,
 } from "../store/apiClient";
 
 // USB HID barcode scanners type characters as a rapid burst terminated by Enter.
@@ -95,7 +98,18 @@ export default function Inventory() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isDiscountOpen, setIsDiscountOpen] = useState(false);
   const [activeProduct, setActiveProduct] = useState(null);
+  const [discountTarget, setDiscountTarget] = useState(null);
+  const [discountForm, setDiscountForm] = useState({
+    type: "PERCENTAGE",
+    value: "",
+    reason: "",
+    endDate: "",
+  });
+  const [discountFormError, setDiscountFormError] = useState("");
+  const [discountSaving, setDiscountSaving] = useState(false);
+  const [promotionsReloadToken, setPromotionsReloadToken] = useState(0);
   const [editForm, setEditForm] = useState({
     name: "",
     sku: "",
@@ -411,6 +425,80 @@ export default function Inventory() {
     }
   };
 
+  // Opens with a blank form by default, or pre-filled when launched from a
+  // promotion recommendation card (overstock / frequently-bought-together).
+  const openDiscountModal = (product, prefill) => {
+    setDiscountTarget(product);
+    setDiscountForm({
+      type: "PERCENTAGE",
+      value: prefill?.suggestedValue?.toString() || "",
+      reason: prefill?.suggestedReason || "",
+      endDate: "",
+    });
+    setDiscountFormError("");
+    setIsDiscountOpen(true);
+  };
+
+  const closeDiscountModal = () => {
+    setIsDiscountOpen(false);
+    setDiscountTarget(null);
+  };
+
+  const handleDiscountChange = (field, value) => {
+    setDiscountForm((current) => ({ ...current, [field]: value }));
+  };
+
+  // Used by PromotionsPanel's "Create Discount" buttons, which only have a
+  // productId/productName (not the full product row from the table).
+  const handleCreateDiscountFromRecommendation = (input) => {
+    openDiscountModal(
+      { id: input.productId, name: input.productName },
+      { suggestedValue: input.suggestedValue, suggestedReason: input.suggestedReason },
+    );
+  };
+
+  const handleSaveDiscount = async () => {
+    if (!discountTarget) return;
+    const parsedValue = parseFloat(discountForm.value);
+    if (Number.isNaN(parsedValue) || parsedValue <= 0) {
+      setDiscountFormError("Enter a discount value greater than 0.");
+      return;
+    }
+    if (discountForm.type === "PERCENTAGE" && parsedValue > 100) {
+      setDiscountFormError("Percentage discount cannot exceed 100.");
+      return;
+    }
+
+    setDiscountSaving(true);
+    setDiscountFormError("");
+    try {
+      await createDiscount({
+        productId: discountTarget.id,
+        type: discountForm.type,
+        value: parsedValue,
+        reason: discountForm.reason.trim() || undefined,
+        endDate: discountForm.endDate || undefined,
+      });
+      closeDiscountModal();
+      setPromotionsReloadToken((t) => t + 1);
+      await loadProducts();
+    } catch (error) {
+      setDiscountFormError(error.message || "Failed to create discount.");
+    } finally {
+      setDiscountSaving(false);
+    }
+  };
+
+  const handleRemoveDiscount = async (discountId) => {
+    try {
+      await deleteDiscount(discountId);
+      setPromotionsReloadToken((t) => t + 1);
+      await loadProducts();
+    } catch (error) {
+      console.error("Failed to remove discount:", error);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -457,6 +545,12 @@ export default function Inventory() {
           Loading AI demand forecasts…
         </div>
       ) : null}
+
+      {/* Promotion Recommendations & Frequently Bought Together */}
+      <PromotionsPanel
+        reloadToken={promotionsReloadToken}
+        onCreateDiscount={handleCreateDiscountFromRecommendation}
+      />
 
       {/* Bottom Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -539,6 +633,7 @@ export default function Inventory() {
                 <th className="px-6 py-3">Product Name</th>
                 <th className="px-6 py-3">Category</th>
                 <th className="px-6 py-3">Unit Price</th>
+                <th className="px-6 py-3">Promo</th>
                 <th className="px-6 py-3">Stock</th>
                 <th className="px-6 py-3">Threshold</th>
                 <th className="px-6 py-3">Status</th>
@@ -551,7 +646,7 @@ export default function Inventory() {
                 <tr>
                   <td
                     className="px-6 py-6 text-center text-gray-500"
-                    colSpan={9}
+                    colSpan={10}
                   >
                     Loading products...
                   </td>
@@ -560,7 +655,7 @@ export default function Inventory() {
                 <tr>
                   <td
                     className="px-6 py-6 text-center text-red-600"
-                    colSpan={9}
+                    colSpan={10}
                   >
                     {productsError}
                   </td>
@@ -569,7 +664,7 @@ export default function Inventory() {
                 <tr>
                   <td
                     className="px-6 py-6 text-center text-gray-500"
-                    colSpan={9}
+                    colSpan={10}
                   >
                     No products found.
                   </td>
@@ -589,8 +684,42 @@ export default function Inventory() {
                       <td className="px-6 py-4 text-gray-700">
                         {product.category}
                       </td>
-                      <td className="px-6 py-4 text-teal-600 font-semibold">
-                        {formatCurrency(product.price)}
+                      <td className="px-6 py-4">
+                        {product.discount ? (
+                          <>
+                            <p className="text-xs text-gray-400 line-through leading-none">
+                              {formatCurrency(product.originalPrice)}
+                            </p>
+                            <p className="text-red-600 font-semibold">
+                              {formatCurrency(product.price)}
+                            </p>
+                          </>
+                        ) : (
+                          <span className="text-teal-600 font-semibold">
+                            {formatCurrency(product.price)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {product.discount ? (
+                          <button
+                            onClick={() => handleRemoveDiscount(product.discount.id)}
+                            title={`${product.discount.reason || "Active discount"} — click to remove`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+                          >
+                            {product.discount.type === "PERCENTAGE"
+                              ? `-${product.discount.value}%`
+                              : `-${formatCurrency(product.discount.value)}`}
+                            <span className="material-symbols-outlined text-xs leading-none">close</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => openDiscountModal(product)}
+                            className="text-xs text-gray-400 hover:text-teal-600 transition-colors"
+                          >
+                            + Add
+                          </button>
+                        )}
                       </td>
                       <td className="px-6 py-4 font-semibold text-gray-900">
                         {product.stock}
@@ -1009,6 +1138,103 @@ export default function Inventory() {
                 onClick={handleDeleteProduct}
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isDiscountOpen ? (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Add Discount
+                {discountTarget ? (
+                  <span className="block text-sm font-normal text-gray-500 mt-0.5">
+                    {discountTarget.name}
+                  </span>
+                ) : null}
+              </h3>
+              <button
+                className="text-gray-500 hover:text-gray-800"
+                onClick={closeDiscountModal}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Type
+                  </label>
+                  <select
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    value={discountForm.type}
+                    onChange={(e) => handleDiscountChange("type", e.target.value)}
+                  >
+                    <option value="PERCENTAGE">Percentage (%)</option>
+                    <option value="FIXED">Fixed amount (LKR)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Value
+                  </label>
+                  <input
+                    type="number"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    placeholder={discountForm.type === "PERCENTAGE" ? "e.g. 15" : "e.g. 50"}
+                    value={discountForm.value}
+                    onChange={(e) => handleDiscountChange("value", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Reason
+                  <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                </label>
+                <input
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  placeholder="e.g. Overstock clearance"
+                  value={discountForm.reason}
+                  onChange={(e) => handleDiscountChange("reason", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  End date
+                  <span className="text-gray-400 font-normal ml-1">(optional — leave blank for open-ended)</span>
+                </label>
+                <input
+                  type="date"
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  value={discountForm.endDate}
+                  onChange={(e) => handleDiscountChange("endDate", e.target.value)}
+                />
+              </div>
+              {discountFormError ? (
+                <p className="text-sm text-red-600">{discountFormError}</p>
+              ) : null}
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900"
+                onClick={closeDiscountModal}
+                disabled={discountSaving}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-60"
+                onClick={handleSaveDiscount}
+                disabled={discountSaving}
+              >
+                {discountSaving ? "Saving…" : "Apply Discount"}
               </button>
             </div>
           </div>

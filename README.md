@@ -39,12 +39,14 @@ Built for Sri Lankan small grocery shops with LKR currency support, LankaQR paym
 - Cash, card, wallet, LankaQR, bank transfer, and credit/tab payments
 - LKR currency formatting (`toLocaleString('en-LK')`)
 - Thermal receipt printing via ESC/POS
+- Full transaction history with date filters and receipt reprint
 
 </td>
 <td width="50%">
 
 **Inventory**
 - Real-time stock tracking and low-stock alerts
+- Add products with USB barcode scanner auto-fill
 - Configurable reorder thresholds per product
 - Category management
 - Inventory change log for auditing
@@ -57,11 +59,23 @@ Built for Sri Lankan small grocery shops with LKR currency support, LankaQR paym
 **AI & Analytics**
 - Dashboard with 7-day and 4-week sales trends
 - Demand forecast (heuristic engine with pluggable ONNX adapter)
-- AI narrative summaries via Claude API (cached, cost-controlled)
+- AI narrative summaries via Claude API (cached, cost-controlled, manual refresh)
+- Stockout-day and restock-quantity estimates per product
 - Payment method breakdown chart
 
 </td>
 <td width="50%">
+
+**Promotions**
+- Overstock detection — flags low-demand, high-stock products for clearance
+- Market basket analysis — surfaces frequently-bought-together pairs
+- One-click discount creation from either recommendation
+- Percentage or fixed discounts, auto-applied at the POS and in cart totals
+
+</td>
+</tr>
+<tr>
+<td width="50%" colspan="2">
 
 **Operations**
 - Role-based access: Cashier, Manager, Admin
@@ -202,9 +216,10 @@ ai-pos-system/
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── POS/        # Terminal: ProductGrid, Cart, payment dialogs
-│   │   │   ├── Dashboard/  # Analytics: SalesChart, DemandForecast, AIInsightStrip
-│   │   │   └── Settings/   # Account, Users, Diagnostics panels
-│   │   ├── pages/          # Login, Inventory, Settings, Help
+│   │   │   ├── Dashboard/  # Analytics: SalesChart, DemandForecastTable, TransactionsList
+│   │   │   ├── Settings/   # Account, Users, Diagnostics panels
+│   │   │   └── PromotionsPanel.jsx  # Overstock + market-basket recommendation cards
+│   │   ├── pages/          # Login, Inventory, Transactions, Settings, Help
 │   │   ├── store/          # Zustand: authStore, apiClient
 │   │   └── hooks/          # Custom React hooks
 │   └── vite.config.js
@@ -213,14 +228,16 @@ ai-pos-system/
 │   ├── index.js            # Startup, env validation, route mounting
 │   ├── db.js               # Prisma singleton
 │   ├── middleware/         # JWT auth, role guards, error handler
-│   ├── routes/             # auth, products, categories, transactions,
-│   │                       # payments, dashboard, ai, hardware, users
+│   ├── routes/             # auth, products, categories, transactions, payments,
+│   │                       # dashboard, ai, discounts, promotions, hardware, users
 │   └── services/
 │       ├── syncEngine.js   # localWrite() — atomic DB write + outbox entry
 │       ├── syncDaemon.js   # Background outbox flush to Supabase
 │       ├── paymentHandler.js
+│       ├── discountService.js  # Effective-price calc + active-discount lookup
 │       ├── aiInference.js  # Demand forecast facade (heuristic / ONNX adapter)
-│       ├── ai/             # Claude API integration, model registry, adapters
+│       ├── ai/             # Claude API integration, model registry, adapters,
+│       │                   # salesHistory (shared history builder), marketBasket
 │       └── hardware/       # Printer registry, ESC/POS adapter, receipt formatter
 │
 ├── electron/
@@ -232,7 +249,7 @@ ai-pos-system/
 │   └── seed.js             # Default users, categories, products
 │
 ├── scripts/
-│   ├── beforeBuild.js      # electron-builder hook: prisma generate + seed DB
+│   ├── beforeBuild.js      # electron-builder hook: prisma generate + build prisma/seed.db
 │   └── afterPack.js        # electron-builder hook: npm install --production
 │
 └── ai/
@@ -302,6 +319,28 @@ getInsight(forecastData)
   └── All gates open → call Claude API → store in AIInsight table
 ```
 
+### Promotion Recommendations
+
+Two read-only, insight-only signals surfaced on the Inventory page — neither creates a discount automatically; a manager always clicks "Create Discount" to act on one.
+
+```
+GET /api/promotions/overstock
+  └── For every product with stockQty > reorderThreshold:
+        overstockRatio = stockQty / max(forecastPoint7d, 0.5)
+        └── ratio ≥ 2 → candidate, ranked highest-ratio first
+            (a product with zero recent sales floors to the maximum ratio,
+             so true dead stock always surfaces ahead of merely slow movers)
+
+GET /api/promotions/basket
+  └── Market basket analysis over OrderItem history (last 90 days):
+        support(A,B)  = pairCount(A,B) / totalOrders
+        confidence(A→B) = pairCount(A,B) / ordersContaining(A)
+        lift(A,B)     = support(A,B) / (support(A) × support(B))
+        └── ranked by lift desc, pairCount as tiebreak
+```
+
+A `Discount` (percentage or fixed, optional reason/end-date) is attached to at most one *active* record per product. `server/services/discountService.js` computes `effectivePriceLKR` server-side, which flows straight into `apiClient.normalizeProduct()` as `price` — so the POS product grid, cart totals, and checkout all show the discounted price with zero extra client-side logic.
+
 ---
 
 ## Database Schema
@@ -318,6 +357,7 @@ getInsight(forecastData)
 | **OrderItem** | id, orderId, productId, quantity, unitPriceLKR |
 | **Payment** | id, orderId, method, status, amountLKR, changeLKR, gatewayRef |
 | **InventoryLog** | id, productId, qtyChange, reason, loggedAt |
+| **Discount** | id, productId, type (PERCENTAGE\|FIXED), value, reason, startDate, endDate, active |
 | **Outbox** | id, entity, entityId, operation, payload (JSON string), synced |
 | **AuditLog** | id, userId, action, metadata (JSON string) |
 | **AIInsight** | id, narrative, inputHash, generatedAt, stale |
@@ -361,10 +401,14 @@ The `package` script runs two electron-builder hooks automatically:
 
 | Hook | What it does |
 |---|---|
-| `scripts/beforeBuild.js` | Runs `prisma generate` then `prisma migrate deploy` to create a clean seed database with full migration history |
+| `scripts/beforeBuild.js` | Runs `prisma generate` then `prisma migrate deploy` against `prisma/seed.db` to build a clean, bundled seed database with full migration history |
 | `scripts/afterPack.js` | Runs `npm install --production` inside the staged app directory (electron-builder excludes `node_modules` by default in v26+) |
 
 > **Why `asar: false`?** Node's `require()` cannot resolve modules from inside an `.asar` archive at runtime. With `asar: false`, `node_modules` sits next to `server/` in `resources/app/` — standard resolution just works.
+
+> **`prisma/seed.db` vs `prisma/pos.db`:** `seed.db` is a disposable build artifact — the empty template copied into `%APPDATA%` on a user's first launch. `pos.db` is your local dev database (`DATABASE_URL=file:./pos.db` in `.env`). They're deliberately separate files; an earlier version of `beforeBuild.js` rebuilt `pos.db` directly, which silently wiped local dev transaction history on every `npm run package`.
+
+> **Stop `npm run dev` before packaging.** `prisma generate` overwrites the native query-engine binary (`query_engine-windows.dll.node`). If a dev server (or any other process using `@prisma/client`) is still running, Windows holds that file locked and the build fails with `EPERM: operation not permitted, unlink ...`.
 
 ---
 
@@ -422,6 +466,7 @@ The `release-windows` job builds on `windows-latest`, runs both electron-builder
 - **Currency** — always format with `toLocaleString('en-LK')`
 - **DB writes** — always use `localWrite()` in `server/services/syncEngine.js`; never call `prisma.*` directly in route handlers
 - **Payment logic** — lives in `server/services/paymentHandler.js`; routes only call `processPayment()`
+- **Discount logic** — lives in `server/services/discountService.js`; a product has at most one *active* discount, enforced in app code (deactivated, not deleted, so history is preserved)
 - **Error handling** — all route handlers use `try/catch` and `next(error)` to the central error handler
 
 ---

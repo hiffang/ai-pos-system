@@ -9,6 +9,7 @@ const router = express.Router();
 const prisma = require("../db");
 const { localWrite } = require("../services/syncEngine");
 const { requireRole } = require("../middleware/auth");
+const { getActiveDiscountsMap, attachDiscount } = require("../services/discountService");
 
 /**
  * @param {string} message
@@ -123,9 +124,12 @@ router.get(
         orderBy: { name: "asc" },
       });
 
+      const discountMap = await getActiveDiscountsMap(products.map((p) => p.id));
+      const enriched = products.map((p) => attachDiscount(p, discountMap.get(p.id)));
+
       res.json({
         status: "success",
-        data: products,
+        data: enriched,
         pagination: {
           skip: parsedSkip,
           take: parsedTake,
@@ -226,9 +230,11 @@ router.get(
         throw createHttpError("Barcode not found", 404);
       }
 
+      const discountMap = await getActiveDiscountsMap([product.id]);
+
       res.json({
         status: "success",
-        data: product,
+        data: attachDiscount(product, discountMap.get(product.id)),
       });
     } catch (error) {
       next(error);
@@ -259,9 +265,11 @@ router.get(
         throw createHttpError("Product not found", 404);
       }
 
+      const discountMap = await getActiveDiscountsMap([product.id]);
+
       res.json({
         status: "success",
-        data: product,
+        data: attachDiscount(product, discountMap.get(product.id)),
       });
     } catch (error) {
       next(error);
